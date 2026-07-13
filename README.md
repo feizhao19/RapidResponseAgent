@@ -12,6 +12,8 @@ Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtu
 
 > **Early release:** not everything from the full system is published yet (notably ViPDE internals, weights, and pipeline `scripts/`). We plan to **release remaining pieces gradually**—see [Release status](#release-status).
 
+Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment)** — licensing and citation follow that project ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)).
+
 ---
 
 ## What it does
@@ -181,11 +183,64 @@ This repository is an **early, partial release**. Several components that power 
 
 What *is* here today focuses on the agent orchestration, web UI, and documentation so collaborators can understand the system and follow the [demo](https://www.youtube.com/watch?v=lIQxRoqIp14). Expect more surface area (scripts, packaging, and—where licensing allows—perception artifacts) in upcoming releases.
 
-Academic / government / humanitarian use of ViPDE packaging is described under [`perception/LICENSE`](perception/LICENSE). Commercial and operational rights are reserved — see [`perception/COMMERCIAL_LICENSING.md`](perception/COMMERCIAL_LICENSING.md).
+Damage perception is powered by **[ViPDE](https://github.com/feizhao19/RapidDamageAssessment)** ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)). Licensing for ViPDE code and weights follows that project; copies of the same terms live under [`perception/LICENSE`](perception/LICENSE) and [`perception/COMMERCIAL_LICENSING.md`](perception/COMMERCIAL_LICENSING.md).
 
 ---
 
-## License notes
+## License
 
-- Agent orchestration and web UI: see repository terms / project LICENSE where provided.
-- **ViPDE** model code and weights: separate proprietary terms; do not assume open redistribution from a clone alone.
+Terms below mirror the **ViPDE / RapidDamageAssessment** policy. When in doubt, treat the upstream docs as authoritative:
+[RapidDamageAssessment README — License](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md#license).
+
+### License summary
+
+This work is released for:
+
+- ✓ Academic research
+- ✓ Government evaluation (federal, state, and local agencies)
+- ✓ Educational purposes
+- ✓ Nonprofit disaster-response and emergency-management organizations
+
+**Restricted without prior written permission:** commercial use, contractor use, third-party redistribution, and deployment in commercial or operational products.
+
+**Model weights** (e.g. `vipde_vitb_damage_v1.pth`) are **not** included in this repository. Request access by email (below).
+
+### Which document applies to you?
+
+| If you are… | Read this |
+|-------------|-----------|
+| Researcher, student, government evaluator, or qualifying nonprofit user | **[`perception/LICENSE`](perception/LICENSE)** (RGHL v1.0) — permitted use and restrictions; same spirit as [RapidDamageAssessment `LICENSE`](https://github.com/feizhao19/RapidDamageAssessment/blob/main/LICENSE) |
+| Company, contractor, or anyone seeking commercial / operational use or model weights | **[`perception/COMMERCIAL_LICENSING.md`](perception/COMMERCIAL_LICENSING.md)** — then email the author for written approval; see also [RapidDamageAssessment `COMMERCIAL_LICENSING.md`](https://github.com/feizhao19/RapidDamageAssessment/blob/main/COMMERCIAL_LICENSING.md) |
+
+### Background
+
+RapidResponseAgent and ViPDE support disaster-response research and evaluation with public-sector and nonprofit emergency-management partners. The license above is intended to keep research, education, and humanitarian/public-safety evaluation available while preventing unauthorized commercial use, contractor redistribution, or operational deployment without explicit approval.
+
+**Contact:** Fei Zhao — [zhaof.thu@gmail.com](mailto:zhaof.thu@gmail.com) · [github.com/feizhao19](https://github.com/feizhao19)  
+(Weights access, commercial licensing, and other permissions not covered by [`perception/LICENSE`](perception/LICENSE))
+
+---
+
+## Acknowledgments & citation
+
+RapidResponseAgent builds on **ViPDE** for building-damage perception. If you use this agent, ViPDE, or related weights, please **cite** the ViPDE paper (and SAM when applicable). Full citation blocks are in the [ViPDE README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md#acknowledgments).
+
+> Fei Zhao, Chengcui Zhang, Runlin Zhang, and Tianyang Wang. **Visual Prompt Learning of Foundation Models for Post-Disaster Damage Evaluation**. *Remote Sensing* **17**, no. 10: 1664, 2025.
+>
+> DOI: https://doi.org/10.3390/rs17101664
+
+```bibtex
+@article{zhao2025visual,
+  title={Visual Prompt Learning of Foundation Models for Post-Disaster Damage Evaluation},
+  author={Zhao, Fei and Zhang, Chengcui and Zhang, Runlin and Wang, Tianyang},
+  journal={Remote Sensing},
+  volume={17},
+  number={10},
+  pages={1664},
+  year={2025},
+  publisher={MDPI},
+  doi={10.3390/rs17101664}
+}
+```
+
+ViPDE extends Meta’s **Segment Anything Model (SAM)**; see [Acknowledgments in RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md#acknowledgments) for the SAM citation and Apache 2.0 notice.
