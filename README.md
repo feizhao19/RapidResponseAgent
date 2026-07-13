@@ -12,7 +12,7 @@ These verified artifacts are then consumed by downstream reasoning agents, enabl
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=lIQxRoqIp14">
-    <img src="pic/Agent_project.png" alt="RapidResponseAgent UI — click to watch the demo on YouTube" width="900"/>
+    <img src="pic/Agent_project_final.png" alt="RapidResponseAgent UI — click to watch the demo on YouTube" width="900"/>
   </a>
 </p>
 
