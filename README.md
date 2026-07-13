@@ -37,6 +37,8 @@ The runtime coordinates:
 
 By separating GPU-intensive perception from lightweight reasoning, the system supports efficient iterative analysis while keeping sensitive disaster imagery entirely **on-premises**.
 
+We will **gradually release** more of this work over time (including withheld pipeline components and packaging where licensing allows).
+
 ---
 
 ## What it does
