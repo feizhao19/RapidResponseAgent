@@ -40,18 +40,37 @@ The runtime coordinates:
 By separating GPU-intensive perception from lightweight reasoning, the system supports efficient iterative analysis while keeping sensitive disaster imagery entirely **on-premises**.
 
 ```text
-Imagery (Maxar pre + NOAA post, or upload)
-        │
-        ▼
-┌─────────────────── Assessment pipeline (LangGraph) ───────────────────┐
-│  preprocess → location → ViPDE perception → footprint fusion          │
-│       → VLM arbitrate / damage review → stats → hospitals             │
-│       → report ∥ map visualization → finalize (indexes)               │
-└───────────────────────────────────────────────────────────────────────┘
-        │
-        ▼
-Chat agent (intent router + tools)  ←→  Web UI (map, stats, report, VLM)
+        Pre / Post Disaster Images
+                    │
+                    ▼
+           ViPDE Damage Assessment
+                    │
+                    ▼
+         Footprint Fusion (LARIAC)
+                    │
+                    ▼
+       Uncertain / Inconsistent Cases
+                    │
+                    ▼
+           VLM Verification Agent
+            (discrepancy reasoning)
+                    │
+                    ▼
+         Verified Assessment Artifacts
+                    │
+         ┌──────────┼──────────┐
+         ▼          ▼          ▼
+    Statistics   Facility   RAG + LLM
+     Analysis     Lookup    Reasoning
+                    │
+                    ▼
+            Interactive Map Chat
+                    │
+                    ▼
+          Decision-Ready Reports
 ```
+
+Pipeline step order in code: `preprocessing` → `location` → `perception` → `fusion` → `vlm_arbitrate` → `stats` → `facilities` → `report` ∥ `visualization` → finalize.
 
 **Chat tools:** `get_damage_stats`, `find_nearest_hospitals`, `weather_context`, `query_historical`, `generate_report`.
 
