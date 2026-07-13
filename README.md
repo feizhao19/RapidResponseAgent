@@ -4,6 +4,12 @@
 
 Built for emergency operations, research partners, and field analysts who need a fast path from imagery to actionable situational awareness.
 
+### Demo
+
+[![RapidResponseAgent demo](https://img.youtube.com/vi/lIQxRoqIp14/maxresdefault.jpg)](https://www.youtube.com/watch?v=lIQxRoqIp14)
+
+Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtube.com/watch?v=lIQxRoqIp14)**
+
 ---
 
 ## What it does
