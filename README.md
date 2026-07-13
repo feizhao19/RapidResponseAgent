@@ -22,12 +22,12 @@ Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtu
 
 <table align="center" cellpadding="10">
   <tr>
-    <td align="center"><img src="pic/building_det1.png" alt="Building detection result 1" height="280"/></td>
-    <td align="center"><img src="pic/building_det2.png" alt="Building detection result 2" height="280"/></td>
+    <td align="center" bgcolor="#ececf0"><img src="pic/building_det1.png" alt="Building detection result 1" height="280"/></td>
+    <td align="center" bgcolor="#ededf1"><img src="pic/building_det2.png" alt="Building detection result 2" height="280"/></td>
   </tr>
   <tr>
-    <td align="center"><img src="pic/damage_evl1.png" alt="Damage evaluation result 1" height="280"/></td>
-    <td align="center"><img src="pic/damage_evl2.png" alt="Damage evaluation result 2" height="280"/></td>
+    <td align="center" bgcolor="#ececf0"><img src="pic/damage_evl1.png" alt="Damage evaluation result 1" height="280"/></td>
+    <td align="center" bgcolor="#ebebef"><img src="pic/damage_evl2.png" alt="Damage evaluation result 2" height="280"/></td>
   </tr>
 </table>
 
