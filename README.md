@@ -8,7 +8,11 @@ In practice: pre/post remote-sensing imagery becomes building-level damage asses
 
 ### Demo
 
-[![RapidResponseAgent demo](https://img.youtube.com/vi/lIQxRoqIp14/maxresdefault.jpg)](https://www.youtube.com/watch?v=lIQxRoqIp14)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=lIQxRoqIp14">
+    <img src="pic/Agent_project.png" alt="RapidResponseAgent UI — click to watch the demo on YouTube" width="900"/>
+  </a>
+</p>
 
 Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtube.com/watch?v=lIQxRoqIp14)**
 
