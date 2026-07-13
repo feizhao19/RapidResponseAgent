@@ -1,0 +1,11 @@
+model_name: vit_b
+# Paths are relative to perception/ (or absolute).
+weights: checkpoints/vipde_vitb_damage_v1.pth
+num_classes: 5
+img_size: 1024
+resample: lanczos
+precision: fp32
+output_dir: outputs
+
+pixel_mean: [0.5, 0.5, 0.5]
+pixel_std: [0.5, 0.5, 0.5]

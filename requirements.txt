@@ -1,0 +1,23 @@
+# Data / alignment
+numpy>=2.0
+scipy>=1.11
+rasterio>=1.3
+geopandas>=1.0
+pyogrio>=0.7
+
+# Perception (ViPDE) — also see perception/requirements.txt
+torch>=2.0.0
+torchvision>=0.15.0
+Pillow>=9.0.0
+
+# Report agent (Llama 3.2 1B via transformers)
+transformers>=4.43.0
+accelerate>=0.33.0
+huggingface-hub>=0.23.0
+
+# Multi-agent orchestration
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# Historical assessment RAG
+sentence-transformers>=3.0.0

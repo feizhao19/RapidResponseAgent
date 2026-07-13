@@ -1,0 +1,97 @@
+ViPDE — Visual Prompt Damage Evaluation
+Research, Government, and Humanitarian Use License (RGHL v1.0)
+
+Copyright (c) 2026 Fei Zhao
+
+This software is developed in support of disaster-response research and
+evaluation with public-sector and nonprofit emergency-management
+organizations.
+
+-----------------------------------------------------------------------------
+
+PERMITTED USE
+
+You may use, reproduce, and modify this repository's source code without
+prior written permission for:
+
+  • Academic research
+  • Government evaluation (including federal, state, and local agencies)
+  • Educational purposes
+  • Humanitarian aid and public safety evaluation
+  • Nonprofit organizations with missions in disaster response, emergency
+    management, humanitarian aid, or public safety
+
+-----------------------------------------------------------------------------
+
+RESTRICTED USE — PRIOR WRITTEN PERMISSION REQUIRED
+
+The following are strictly prohibited without prior written permission
+from the copyright holder:
+
+  • Commercial use
+  • Contractor or vendor use for a commercial purpose
+  • Third-party redistribution of the software, model code, or derivatives
+  • Deployment in commercial products or operational production systems
+    (including paid services, SaaS, or contractor-delivered solutions)
+
+Government contractors and vendors acting solely on behalf of a government
+agency for government evaluation may request authorization under separate
+written terms. Such authorization does not extend to commercial client work,
+resale, redistribution, or operational production for a for-profit operator.
+
+-----------------------------------------------------------------------------
+
+ATTRIBUTION
+
+Any publication, report, presentation, slide deck, website, or derivative
+work that uses this software, model outputs, or related documentation must
+provide clear attribution to:
+
+  Fei Zhao, ViPDE (Visual Prompt Damage Evaluation)
+
+Academic use should also cite the associated research publication when
+available.
+
+-----------------------------------------------------------------------------
+
+COMMERCIAL RIGHTS RESERVED
+
+All commercial rights in this software, model architecture, documentation,
+and associated intellectual property are expressly reserved by the
+copyright holder. No commercial license is granted by the terms above.
+Commercial, contractor, redistribution, and operational production use
+require a separate written agreement. See COMMERCIAL_LICENSING.md for the
+inquiry process and reserved-rights summary.
+
+-----------------------------------------------------------------------------
+
+MODEL WEIGHTS AND PROPRIETARY COMPONENTS
+
+Model weights (e.g. vipde_vitb_damage_v1.pth), proprietary model
+components, and related artifacts are not redistributed under this
+license by default. Access is available upon request and subject to
+separate written terms.
+
+-----------------------------------------------------------------------------
+
+NO WARRANTY
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+-----------------------------------------------------------------------------
+
+CONTACT
+
+For commercial licensing, contractor use for commercial purposes,
+government contractor authorization, redistribution, operational
+deployment, or access to model weights:
+
+  Fei Zhao
+  Email: zhaof.thu@gmail.com
+  GitHub: https://github.com/feizhao19
