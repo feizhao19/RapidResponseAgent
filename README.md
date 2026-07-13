@@ -18,8 +18,6 @@ These verified artifacts are then consumed by downstream reasoning agents, enabl
 
 Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtube.com/watch?v=lIQxRoqIp14)**
 
-> **Early release:** not everything from the full system is published yet (notably ViPDE internals, weights, and pipeline `scripts/`). We plan to **release remaining pieces gradually**—see [Release status](#release-status).
-
 Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment)** — licensing and citation follow that project ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)).
 
 ---
@@ -145,21 +143,8 @@ More detail: [`web/README.md`](web/README.md).
 1. Start a chat session and select an indexed AOI (or upload imagery for a **new assessment**).
 2. Wait for the pipeline job (`aligning` → `running` → `completed`).
 3. Explore the map: pre/post imagery, building polygons by damage class, hospitals.
-4. Open **stats / report / VLM Building Review** panels; optionally re-run footprint or damage VLM review.
+4. Open **stats / report / hospitals** panels as needed.
 5. Ask grounded questions, e.g. damage counts for the active AOI, nearest hospitals, weather outlook, or a comparison to a past case.
-
----
-
-## VLM building review
-
-After fusion, Llama 3.2 Vision can review:
-
-- **Footprint discrepancies** — e.g. ViPDE blobs outside LARIAC (`fp_orphan`) or footprints with little ViPDE signal (`fn_inferred`)
-- **Predicted damage** — pre + post chips for buildings labeled `destroyed`, recommending `damaged` / `not_damaged`
-
-Reviews use an augmented-view ensemble (rotations + flips), majority vote, then a short rationale. Prefer the **web UI** controls on an existing AOI; offline CLIs live under `scripts/` when that directory is included in your checkout.
-
-Pipeline skip flags: `skip_vlm_arbitrate=1`, `skip_vlm_discrepancy=1`, `skip_vlm_damage_review=1`.
 
 ---
 
@@ -174,23 +159,6 @@ Pipeline skip flags: `skip_vlm_arbitrate=1`, `skip_vlm_discrepancy=1`, `skip_vlm
 - Conda env **`sam`** for ViPDE + API (`./web/run_api.sh` uses `sam` if no `.venv`)
 - Put **`HF_TOKEN`** in `.env` after accepting Meta licenses
 - Prefer caching weights under `RapidResponseAgent/.cache/` (via `scripts/project_env.sh` or `HF_HOME`)
-
----
-
-## Release status
-
-This repository is an **early, partial release**. Several components that power a full local deployment are **not published yet** and will be opened **gradually** in later releases:
-
-| Item | Current status |
-|------|----------------|
-| **ViPDE package source** (`perception/vipde/models`, `utils`) | Not released; placeholder only in git |
-| **ViPDE weights** (`perception/checkpoints/`) | Not redistributed; access by request |
-| **Pipeline scripts** (`scripts/`) | Not included in this checkout yet |
-| **Local data / caches** (`data/`, `.cache/`, `.env`) | Never committed (machine-local) |
-
-What *is* here today focuses on the agent orchestration, web UI, and documentation so collaborators can understand the system and follow the [demo](https://www.youtube.com/watch?v=lIQxRoqIp14). Expect more surface area (scripts, packaging, and—where licensing allows—perception artifacts) in upcoming releases.
-
-Damage perception is powered by **[ViPDE](https://github.com/feizhao19/RapidDamageAssessment)** ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)). Licensing for ViPDE code and weights follows that project; copies of the same terms live under [`perception/LICENSE`](perception/LICENSE) and [`perception/COMMERCIAL_LICENSING.md`](perception/COMMERCIAL_LICENSING.md).
 
 ---
 
