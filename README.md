@@ -184,8 +184,8 @@ This work is released for:
 
 | If you are… | Read this |
 |-------------|-----------|
-| Researcher, student, government evaluator, or qualifying nonprofit user | **[`perception/LICENSE`](perception/LICENSE)** (RGHL v1.0) — permitted use and restrictions; same spirit as [RapidDamageAssessment `LICENSE`](https://github.com/feizhao19/RapidDamageAssessment/blob/main/LICENSE) |
-| Company, contractor, or anyone seeking commercial / operational use or model weights | **[`perception/COMMERCIAL_LICENSING.md`](perception/COMMERCIAL_LICENSING.md)** — then email the author for written approval; see also [RapidDamageAssessment `COMMERCIAL_LICENSING.md`](https://github.com/feizhao19/RapidDamageAssessment/blob/main/COMMERCIAL_LICENSING.md) |
+| Researcher, student, government evaluator, or qualifying nonprofit user | [`perception/LICENSE`](perception/LICENSE) (RGHL v1.0) — permitted use and restrictions; same spirit as [RapidDamageAssessment `LICENSE`](https://github.com/feizhao19/RapidDamageAssessment/blob/main/LICENSE) |
+| Company, contractor, or anyone seeking commercial / operational use or model weights | [`perception/COMMERCIAL_LICENSING.md`](perception/COMMERCIAL_LICENSING.md) — then email the author for written approval; see also [RapidDamageAssessment `COMMERCIAL_LICENSING.md`](https://github.com/feizhao19/RapidDamageAssessment/blob/main/COMMERCIAL_LICENSING.md) |
 
 ### Background
 
