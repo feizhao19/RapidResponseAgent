@@ -213,5 +213,3 @@ RapidResponseAgent builds on **ViPDE** for building-damage perception. If you us
   doi={10.3390/rs17101664}
 }
 ```
-
-ViPDE extends Meta’s **Segment Anything Model (SAM)**; see [Acknowledgments in RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md#acknowledgments) for the SAM citation and Apache 2.0 notice.
