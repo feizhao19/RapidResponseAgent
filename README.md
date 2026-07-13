@@ -22,12 +22,28 @@ Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtu
 
 <table align="center" cellpadding="0" cellspacing="10">
   <tr>
-    <td align="center" valign="middle" bgcolor="#f0f0f4" width="520" height="300"><img src="pic/building_det1.png" alt="Building detection result 1" height="280"/></td>
-    <td align="center" valign="middle" bgcolor="#f0f0f4" width="520" height="300"><img src="pic/building_det2.png" alt="Building detection result 2" height="280"/></td>
+    <td align="center" valign="middle">
+      <div style="background-color:#F1F1F4; padding:10px;">
+        <img src="pic/building_det1.png" alt="Building detection result 1" height="280"/>
+      </div>
+    </td>
+    <td align="center" valign="middle">
+      <div style="background-color:#F1F1F4; padding:10px;">
+        <img src="pic/building_det2.png" alt="Building detection result 2" height="280"/>
+      </div>
+    </td>
   </tr>
   <tr>
-    <td align="center" valign="middle" bgcolor="#f0f0f4" width="520" height="300"><img src="pic/damage_evl1.png" alt="Damage evaluation result 1" height="280"/></td>
-    <td align="center" valign="middle" bgcolor="#f0f0f4" width="520" height="300"><img src="pic/damage_evl2.png" alt="Damage evaluation result 2" height="280"/></td>
+    <td align="center" valign="middle">
+      <div style="background-color:#F1F1F4; padding:10px;">
+        <img src="pic/damage_evl1.png" alt="Damage evaluation result 1" height="280"/>
+      </div>
+    </td>
+    <td align="center" valign="middle">
+      <div style="background-color:#F1F1F4; padding:10px;">
+        <img src="pic/damage_evl2.png" alt="Damage evaluation result 2" height="280"/>
+      </div>
+    </td>
   </tr>
 </table>
 
