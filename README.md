@@ -37,10 +37,6 @@ The runtime coordinates:
 
 By separating GPU-intensive perception from lightweight reasoning, the system supports efficient iterative analysis while keeping sensitive disaster imagery entirely **on-premises**.
 
-**Chat tools:** `get_damage_stats`, `find_nearest_hospitals`, `weather_context`, `query_historical`, `generate_report`.
-
-**Intents:** `new_assessment` | `historical_assessment` | `weather_context` | `clarify`.
-
 ---
 
 ## What it does
