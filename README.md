@@ -20,15 +20,16 @@ Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtu
 
 ### Demo snapshots
 
-<p align="center">
-  <img src="pic/building_det1.png" alt="Building detection result 1" width="48%"/>
-  <img src="pic/building_det2.png" alt="Building detection result 2" width="48%"/>
-</p>
-
-<p align="center">
-  <img src="pic/damage_evl1.png" alt="Damage evaluation result 1" width="48%"/>
-  <img src="pic/damage_evl2.png" alt="Damage evaluation result 2" width="48%"/>
-</p>
+<table align="center" cellpadding="10">
+  <tr>
+    <td align="center"><img src="pic/building_det1.png" alt="Building detection result 1" height="280"/></td>
+    <td align="center"><img src="pic/building_det2.png" alt="Building detection result 2" height="280"/></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="pic/damage_evl1.png" alt="Damage evaluation result 1" height="280"/></td>
+    <td align="center"><img src="pic/damage_evl2.png" alt="Damage evaluation result 2" height="280"/></td>
+  </tr>
+</table>
 
 Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment)** — licensing and citation follow that project ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)).
 
