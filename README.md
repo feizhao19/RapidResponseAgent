@@ -1,10 +1,12 @@
 # RapidResponseAgent
 
-**Multimodal AI Agent** — an agentic runtime for post-disaster assessment.
+**Multimodal AI Agent for Post-Disaster Assessment**
 
-**RapidResponseAgent** is an artifact-centric orchestration stack for heterogeneous geospatial agent workloads. The runtime coordinates GPU-heavy **ViPDE** perception, structured damage analytics, facilities lookup, and locally deployed **RAG + LLM** reasoning through persistent session memory, episodic tool traces, and manifest-driven checkpoints—keeping sensitive disaster imagery and assessment data **on-premises**. It decouples heavy inference from lightweight follow-ups, enabling reliable multi-turn Q&A over cached assessment artifacts and on-demand, decision-ready reports.
+RapidResponseAgent is an agentic runtime that transforms raw remote-sensing imagery into actionable disaster intelligence. Rather than treating perception and reasoning as independent stages, it combines vision models, verification agents, geospatial analytics, and language models into a unified workflow for emergency response.
 
-In practice: pre/post remote-sensing imagery becomes building-level damage assessments, then operational questions are answered in a map-centric chat UI (stats, nearest hospitals, weather context, historical cases, and written reports)—for emergency operations, research partners, and field analysts.
+The pipeline begins with **ViPDE**, which performs large-scale building damage assessment from paired pre- and post-disaster imagery. Instead of accepting every prediction as final, a **Vision-Language Agent** reviews uncertain or inconsistent cases, verifies discrepancies using multimodal reasoning, and refines assessment results before they become reusable disaster assessment artifacts.
+
+These verified artifacts are then consumed by downstream reasoning agents, enabling low-latency multi-turn question answering, infrastructure analysis, and report generation without rerunning expensive visual inference.
 
 ### Demo
 
@@ -22,21 +24,20 @@ Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizha
 
 ---
 
-## What it does
+## Architecture
 
-| Capability | Description |
-|------------|-------------|
-| **Damage assessment** | Align pre/post imagery → run **ViPDE** pixel damage perception → fuse with official building footprints (LARIAC) |
-| **VLM review** | Llama Vision double-checks footprint mismatches and “destroyed” labels with pre/post chips |
-| **Map + panels** | Leaflet map with imagery overlays, damage polygons, hospitals, region stats, and assessment report |
-| **Grounded chat** | Multi-turn Q&A scoped to the active AOI: damage stats, hospitals, weather, historical RAG, report generation |
-| **New assessments** | Upload post (and optional pre) GeoTIFF, or auto-match pre from a local Maxar catalog, and run the full pipeline |
+RapidResponseAgent follows an **artifact-centric orchestration** architecture for heterogeneous geospatial AI workloads.
 
-Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases (e.g. Altadena / Topanga-area quads such as `maxar_031311103033`).
+The runtime coordinates:
 
----
+- **ViPDE** for large-scale building damage assessment
+- **VLM verification agents** for discrepancy detection and multimodal reasoning
+- Structured damage analytics
+- Geospatial facility lookup
+- **RAG + locally deployed LLMs** over cached assessment artifacts
+- Persistent session memory, tool traces, and manifest-driven checkpoints for reproducible multi-step analysis
 
-## How it works
+By separating GPU-intensive perception from lightweight reasoning, the system supports efficient iterative analysis while keeping sensitive disaster imagery entirely **on-premises**.
 
 ```text
 Imagery (Maxar pre + NOAA post, or upload)
@@ -55,6 +56,20 @@ Chat agent (intent router + tools)  ←→  Web UI (map, stats, report, VLM)
 **Chat tools:** `get_damage_stats`, `find_nearest_hospitals`, `weather_context`, `query_historical`, `generate_report`.
 
 **Intents:** `new_assessment` | `historical_assessment` | `weather_context` | `clarify`.
+
+---
+
+## What it does
+
+| Capability | Description |
+|------------|-------------|
+| **Damage assessment** | Align pre/post imagery → run **ViPDE** pixel damage perception → fuse with official building footprints (LARIAC) |
+| **VLM review** | Llama Vision double-checks footprint mismatches and “destroyed” labels with pre/post chips |
+| **Map + panels** | Leaflet map with imagery overlays, damage polygons, hospitals, region stats, and assessment report |
+| **Grounded chat** | Multi-turn Q&A scoped to the active AOI: damage stats, hospitals, weather, historical RAG, report generation |
+| **New assessments** | Upload post (and optional pre) GeoTIFF, or auto-match pre from a local Maxar catalog, and run the full pipeline |
+
+Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases (e.g. Altadena / Topanga-area quads such as `maxar_031311103033`).
 
 ---
 
