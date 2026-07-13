@@ -18,6 +18,18 @@ These verified artifacts are then consumed by downstream reasoning agents, enabl
 
 Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtube.com/watch?v=lIQxRoqIp14)**
 
+### Demo snapshots
+
+<p align="center">
+  <img src="pic/building_det1.png" alt="Building detection result 1" width="48%"/>
+  <img src="pic/building_det2.png" alt="Building detection result 2" width="48%"/>
+</p>
+
+<p align="center">
+  <img src="pic/damage_evl1.png" alt="Damage evaluation result 1" width="48%"/>
+  <img src="pic/damage_evl2.png" alt="Damage evaluation result 2" width="48%"/>
+</p>
+
 Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment)** — licensing and citation follow that project ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)).
 
 ---
