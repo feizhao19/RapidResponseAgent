@@ -10,6 +10,8 @@ Built for emergency operations, research partners, and field analysts who need a
 
 Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtube.com/watch?v=lIQxRoqIp14)**
 
+> **Early release:** not everything from the full system is published yet (notably ViPDE internals, weights, and pipeline `scripts/`). We plan to **release remaining pieces gradually**—see [Release status](#release-status).
+
 ---
 
 ## What it does
@@ -166,14 +168,18 @@ Pipeline skip flags: `skip_vlm_arbitrate=1`, `skip_vlm_discrepancy=1`, `skip_vlm
 
 ---
 
-## Proprietary components
+## Release status
 
-| Item | Status |
-|------|--------|
-| **ViPDE package source** (`perception/vipde/models`, `utils`) | Closed-source; local install only |
-| **ViPDE weights** (`perception/checkpoints/`) | Not redistributed in git; request access |
-| **Pipeline scripts** (`scripts/`) | May be withheld from public/shared checkouts |
-| **Local data** (`data/`, `.cache/`, `.env`) | Never committed |
+This repository is an **early, partial release**. Several components that power a full local deployment are **not published yet** and will be opened **gradually** in later releases:
+
+| Item | Current status |
+|------|----------------|
+| **ViPDE package source** (`perception/vipde/models`, `utils`) | Not released; placeholder only in git |
+| **ViPDE weights** (`perception/checkpoints/`) | Not redistributed; access by request |
+| **Pipeline scripts** (`scripts/`) | Not included in this checkout yet |
+| **Local data / caches** (`data/`, `.cache/`, `.env`) | Never committed (machine-local) |
+
+What *is* here today focuses on the agent orchestration, web UI, and documentation so collaborators can understand the system and follow the [demo](https://www.youtube.com/watch?v=lIQxRoqIp14). Expect more surface area (scripts, packaging, and—where licensing allows—perception artifacts) in upcoming releases.
 
 Academic / government / humanitarian use of ViPDE packaging is described under [`perception/LICENSE`](perception/LICENSE). Commercial and operational rights are reserved — see [`perception/COMMERCIAL_LICENSING.md`](perception/COMMERCIAL_LICENSING.md).
 
