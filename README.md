@@ -1,8 +1,10 @@
 # RapidResponseAgent
 
-**RapidResponseAgent** is a multimodal agent for **post-disaster rapid response**. It turns pre/post remote-sensing imagery into building-level damage assessments, then answers operational questions in a map-centric chat UI—stats, nearest hospitals, weather context, historical cases, and written reports.
+**Multimodal AI Agent** — an agentic runtime for post-disaster assessment.
 
-Built for emergency operations, research partners, and field analysts who need a fast path from imagery to actionable situational awareness.
+**RapidResponseAgent** is an artifact-centric orchestration stack for heterogeneous geospatial agent workloads. The runtime coordinates GPU-heavy **ViPDE** perception, structured damage analytics, facilities lookup, and locally deployed **RAG + LLM** reasoning through persistent session memory, episodic tool traces, and manifest-driven checkpoints—keeping sensitive disaster imagery and assessment data **on-premises**. It decouples heavy inference from lightweight follow-ups, enabling reliable multi-turn Q&A over cached assessment artifacts and on-demand, decision-ready reports.
+
+In practice: pre/post remote-sensing imagery becomes building-level damage assessments, then operational questions are answered in a map-centric chat UI (stats, nearest hospitals, weather context, historical cases, and written reports)—for emergency operations, research partners, and field analysts.
 
 ### Demo
 
