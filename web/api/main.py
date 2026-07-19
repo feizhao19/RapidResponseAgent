@@ -15,6 +15,7 @@ from web.api.models import (
     AssessmentJobResponse,
     SessionCreateRequest,
     SessionResponse,
+    VlmPreferenceRequest,
     VlmReviewRequest,
 )
 from web.api.sessions import create_session, get_session_payload, list_episodes
@@ -29,6 +30,7 @@ from web.api.services import (
     remove_aoi,
     resolve_data_file,
     run_ask,
+    submit_vlm_preference,
 )
 
 app = FastAPI(
@@ -245,6 +247,27 @@ def api_start_vlm_review(aoi_id: str, body: VlmReviewRequest | None = None) -> A
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — surface queue/start failures
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/aois/{aoi_id}/vlm-preference")
+def api_vlm_preference(aoi_id: str, body: VlmPreferenceRequest) -> dict:
+    """Record human agree/disagree on the default VLM answer for DPO training pairs."""
+    try:
+        return submit_vlm_preference(
+            aoi_id,
+            review_type=body.review_type,
+            feature_id=body.feature_id,
+            decision=body.decision,
+            session_id=body.session_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

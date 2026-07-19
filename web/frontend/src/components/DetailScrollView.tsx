@@ -56,8 +56,16 @@ type Props = {
   mapCenter?: [number, number];
   hospitals: Hospital[];
   externalMapFocus?: MapFocus | null;
-  onRunVlm?: (mode: VlmReviewMode, options?: { damagedOnly?: boolean }) => void;
+  onRunVlm?: (
+    mode: VlmReviewMode,
+    options?: { damagedOnly?: boolean; limit?: number },
+  ) => void;
   onStopVlm?: () => void;
+  onVlmPreference?: (
+    reviewType: "discrepancy" | "damage",
+    featureId: string,
+    decision: "agree" | "disagree",
+  ) => Promise<void> | void;
   vlmJob?: AssessmentJob | null;
   vlmBusy?: boolean;
 };
@@ -131,6 +139,7 @@ export function DetailScrollView({
   externalMapFocus = null,
   onRunVlm,
   onStopVlm,
+  onVlmPreference,
   vlmJob = null,
   vlmBusy = false,
 }: Props) {
@@ -406,6 +415,7 @@ export function DetailScrollView({
               onShowBuildingOnMap={showVlmBuildingOnMap}
               onRunVlm={onRunVlm}
               onStopVlm={onStopVlm}
+              onVlmPreference={onVlmPreference}
               vlmJob={vlmJob}
               vlmBusy={vlmBusy}
             />

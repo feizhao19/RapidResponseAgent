@@ -356,7 +356,7 @@ def start_vlm_review_job(
     aoi_id: str,
     *,
     mode: Literal["both", "discrepancy", "damage"] = "both",
-    limit: int = 8,
+    limit: int = 2,
     damaged_only: bool = True,
     session_id: str | None = None,
 ) -> dict[str, Any]:
@@ -365,7 +365,8 @@ def start_vlm_review_job(
 
     if mode not in {"both", "discrepancy", "damage"}:
         raise ValueError("mode must be both, discrepancy, or damage")
-    limit = max(1, min(int(limit), 64))
+    # 0 means "all matching candidates" (passed through to select_* helpers).
+    limit = max(0, min(int(limit), 500))
 
     record = find_aoi_record(aoi_id)
     aligned_dir = aligned_dir_for_record(record)

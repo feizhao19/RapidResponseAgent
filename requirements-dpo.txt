@@ -1,0 +1,5 @@
+# Optional deps for Llama-3.2-11B-Vision DPO fine-tuning
+trl>=0.15.0
+peft>=0.11.0
+bitsandbytes>=0.43.0
+datasets>=2.20.0

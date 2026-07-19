@@ -1889,6 +1889,23 @@ body.map-region-dragging {
   opacity: 0.85;
 }
 
+.vlm-run-options-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.1rem;
+}
+
+.vlm-limit-select {
+  border: 1px solid var(--border);
+  background: var(--surface-elevated, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  border-radius: 6px;
+  padding: 0.2rem 0.45rem;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
 .vlm-run-status {
   margin: 0;
   font-size: 0.82rem;
@@ -1955,6 +1972,53 @@ body.map-region-dragging {
   border-radius: var(--radius-sm);
   padding: 0.85rem;
   background: var(--surface-elevated, rgba(255, 255, 255, 0.04));
+}
+
+.vlm-feedback-bar {
+  margin-top: 0.75rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.vlm-feedback-hint,
+.vlm-feedback-saved {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted, #6b7280);
+}
+
+.vlm-feedback-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.vlm-feedback-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.vlm-feedback-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.vlm-feedback-agree:hover:not(:disabled) {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.vlm-feedback-disagree:hover:not(:disabled) {
+  border-color: #dc2626;
+  color: #dc2626;
 }
 
 .vlm-result-header {

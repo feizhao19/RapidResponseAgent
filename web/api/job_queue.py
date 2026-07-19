@@ -29,7 +29,7 @@ class PipelineWorkItem:
     session_id: str | None = None
     kind: JobKind = "pipeline"
     vlm_mode: VlmReviewMode = "both"
-    vlm_limit: int = 8
+    vlm_limit: int = 2
     vlm_damaged_only: bool = True
 
 
@@ -70,7 +70,7 @@ def enqueue_pipeline_job(
     session_id: str | None = None,
     kind: JobKind = "pipeline",
     vlm_mode: VlmReviewMode = "both",
-    vlm_limit: int = 8,
+    vlm_limit: int = 2,
     vlm_damaged_only: bool = True,
 ) -> int:
     """Queue a GPU job. Returns 1-based queue position."""

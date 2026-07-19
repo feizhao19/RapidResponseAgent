@@ -118,7 +118,12 @@ class VlmReviewRequest(BaseModel):
         default="both",
         description="both | discrepancy (footprint) | damage",
     )
-    limit: int = Field(default=8, ge=1, le=64)
+    limit: int = Field(
+        default=2,
+        ge=0,
+        le=500,
+        description="Max candidates to review. Use 0 to review all matching candidates.",
+    )
     damaged_only: bool = Field(
         default=True,
         description=(
@@ -134,4 +139,27 @@ class VlmReviewRequest(BaseModel):
         normalized = (value or "both").strip().casefold()
         if normalized not in {"both", "discrepancy", "damage"}:
             raise ValueError("mode must be both, discrepancy, or damage")
+        return normalized
+
+
+class VlmPreferenceRequest(BaseModel):
+    review_type: str = Field(description="discrepancy | damage")
+    feature_id: str = Field(min_length=1)
+    decision: str = Field(description="agree | disagree with the default VLM answer")
+    session_id: str | None = None
+
+    @field_validator("review_type")
+    @classmethod
+    def validate_review_type(cls, value: str) -> str:
+        normalized = (value or "").strip().casefold()
+        if normalized not in {"discrepancy", "damage"}:
+            raise ValueError("review_type must be discrepancy or damage")
+        return normalized
+
+    @field_validator("decision")
+    @classmethod
+    def validate_decision(cls, value: str) -> str:
+        normalized = (value or "").strip().casefold()
+        if normalized not in {"agree", "disagree"}:
+            raise ValueError("decision must be agree or disagree")
         return normalized
