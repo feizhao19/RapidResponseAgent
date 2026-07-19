@@ -86,7 +86,7 @@ Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases 
 
 | Path | Role |
 |------|------|
-| `geoagent/` | Agents, LangGraph AOI pipeline, runtime (memory / planner / tool router), skills, tools |
+| `geoagent/` | Agent orchestration package — available by request; contact the author (see License) |
 | `perception/` | ViPDE inference entrypoints, configs, docs; proprietary package lives under `vipde/` (local only) |
 | `web/` | FastAPI backend + React / Vite / Leaflet UI |
 | `scripts/` | Offline pipeline CLIs (align, fusion, VLM, reports, model download) — may be omitted in some distributions |
