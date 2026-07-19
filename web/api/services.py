@@ -160,15 +160,44 @@ def get_aoi_detail(aoi_id: str) -> dict[str, Any]:
                     row[f"{chip_key}_url"] = f"{aligned_rel}/{chip_rel}"
         return payload
 
+    from web.api.vlm_preferences import enrich_vlm_payload
+
     vlm_path = aligned_dir / "buildings_out" / "vlm_arbitration.json"
     if vlm_path.is_file():
-        detail["vlm_arbitration"] = _attach_chip_urls(_read_json(vlm_path))
+        detail["vlm_arbitration"] = _attach_chip_urls(
+            enrich_vlm_payload(_read_json(vlm_path), review_type="discrepancy") or {}
+        )
 
     damage_path = aligned_dir / "buildings_out" / "vlm_damage_review.json"
     if damage_path.is_file():
-        detail["vlm_damage_review"] = _attach_chip_urls(_read_json(damage_path))
+        detail["vlm_damage_review"] = _attach_chip_urls(
+            enrich_vlm_payload(_read_json(damage_path), review_type="damage") or {}
+        )
 
     return detail
+
+
+def submit_vlm_preference(
+    aoi_id: str,
+    *,
+    review_type: str,
+    feature_id: str,
+    decision: str,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    """Record human agree/disagree on the default VLM answer for DPO pairs."""
+    from web.api.vlm_preferences import record_preference
+
+    record = find_aoi_record(aoi_id)
+    aligned_dir = aligned_dir_for_record(record)
+    return record_preference(
+        aoi_id=aoi_id,
+        aligned_dir=aligned_dir,
+        review_type=review_type,  # type: ignore[arg-type]
+        feature_id=feature_id,
+        decision=decision,  # type: ignore[arg-type]
+        session_id=session_id,
+    )
 
 
 def _artifact_rel(aligned_dir: Path, rel: str) -> str | None:

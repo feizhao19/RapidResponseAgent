@@ -2,11 +2,21 @@ import { useMemo, useState } from "react";
 import type { AoiDetail, AssessmentJob, VlmArbitrationResult, VlmReviewMode } from "../api/client";
 import { dataAssetUrl } from "../api/client";
 
+type PreferenceDecision = "agree" | "disagree";
+
 type Props = {
   detail: AoiDetail | null;
   onShowBuildingOnMap?: (bldId: string) => void;
-  onRunVlm?: (mode: VlmReviewMode, options?: { damagedOnly?: boolean }) => void;
+  onRunVlm?: (
+    mode: VlmReviewMode,
+    options?: { damagedOnly?: boolean; limit?: number },
+  ) => void;
   onStopVlm?: () => void;
+  onVlmPreference?: (
+    reviewType: "discrepancy" | "damage",
+    featureId: string,
+    decision: PreferenceDecision,
+  ) => Promise<void> | void;
   vlmJob?: AssessmentJob | null;
   vlmBusy?: boolean;
 };
@@ -78,12 +88,88 @@ function MapLink({
   );
 }
 
+
+function canCollectPreference(row: VlmArbitrationResult): boolean {
+  const judgment = row.vlm;
+  if (!judgment || row.error || row.dry_run || judgment.needs_field_check) return false;
+  if (!row.counterfactual?.recommendation) return false;
+  const rec = judgment.recommendation;
+  return Boolean(rec && rec !== "needs_field_check");
+}
+
+function PreferenceControls({
+  row,
+  reviewType,
+  onVlmPreference,
+}: {
+  row: VlmArbitrationResult;
+  reviewType: "discrepancy" | "damage";
+  onVlmPreference?: Props["onVlmPreference"];
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const existing = row.human_preference?.decision;
+
+  if (!onVlmPreference || !canCollectPreference(row)) {
+    return null;
+  }
+
+  async function submit(decision: PreferenceDecision) {
+    setBusy(true);
+    setError(null);
+    try {
+      await onVlmPreference?.(reviewType, row.feature_id, decision);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (existing === "agree" || existing === "disagree") {
+    return (
+      <div className="vlm-feedback-bar">
+        <p className="vlm-feedback-saved">
+          Feedback saved: {existing === "agree" ? "agreed with default VLM answer" : "rejected default → chose opposite hypothesis"}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vlm-feedback-bar">
+      <p className="vlm-feedback-hint">Does the default VLM answer look right?</p>
+      <div className="vlm-feedback-actions">
+        <button
+          type="button"
+          className="vlm-feedback-btn vlm-feedback-agree"
+          disabled={busy}
+          onClick={() => void submit("agree")}
+        >
+          Agree
+        </button>
+        <button
+          type="button"
+          className="vlm-feedback-btn vlm-feedback-disagree"
+          disabled={busy}
+          onClick={() => void submit("disagree")}
+        >
+          Reject
+        </button>
+      </div>
+      {error ? <p className="vlm-error">{error}</p> : null}
+    </div>
+  );
+}
+
 function DiscrepancyCard({
   row,
   onShowBuildingOnMap,
+  onVlmPreference,
 }: {
   row: VlmArbitrationResult;
   onShowBuildingOnMap?: (bldId: string) => void;
+  onVlmPreference?: Props["onVlmPreference"];
 }) {
   const preUrl = row.pre_chip_url ? dataAssetUrl(row.pre_chip_url) : null;
   const judgment = row.vlm;
@@ -139,6 +225,8 @@ function DiscrepancyCard({
           </div>
         </dl>
       ) : null}
+
+      <PreferenceControls row={row} reviewType="discrepancy" onVlmPreference={onVlmPreference} />
     </article>
   );
 }
@@ -146,9 +234,11 @@ function DiscrepancyCard({
 function DamageCard({
   row,
   onShowBuildingOnMap,
+  onVlmPreference,
 }: {
   row: VlmArbitrationResult;
   onShowBuildingOnMap?: (bldId: string) => void;
+  onVlmPreference?: Props["onVlmPreference"];
 }) {
   const preUrl = row.pre_chip_url ? dataAssetUrl(row.pre_chip_url) : null;
   const postUrl = row.post_chip_url ? dataAssetUrl(row.post_chip_url) : null;
@@ -232,6 +322,8 @@ function DamageCard({
           </div>
         </dl>
       ) : null}
+
+      <PreferenceControls row={row} reviewType="damage" onVlmPreference={onVlmPreference} />
     </article>
   );
 }
@@ -241,6 +333,7 @@ export function VlmArbitrationPanel({
   onShowBuildingOnMap,
   onRunVlm,
   onStopVlm,
+  onVlmPreference,
   vlmJob = null,
   vlmBusy = false,
 }: Props) {
@@ -262,6 +355,8 @@ export function VlmArbitrationPanel({
 
   const [tab, setTab] = useState<TabId | null>(null);
   const [damagedOnly, setDamagedOnly] = useState(true);
+  // 0 = review all matching candidates
+  const [limitChoice, setLimitChoice] = useState<number>(2);
   const activeTab = tab && availableTabs.some((item) => item.id === tab)
     ? tab
     : availableTabs[0]?.id ?? null;
@@ -274,6 +369,8 @@ export function VlmArbitrationPanel({
     (vlmJob != null &&
       (vlmJob.status === "queued" || vlmJob.status === "running" || vlmJob.status === "aligning"));
 
+  const runOptions = { damagedOnly, limit: limitChoice };
+
   const runControls = onRunVlm ? (
     <div className="vlm-run-bar">
       <div className="vlm-run-actions">
@@ -281,7 +378,7 @@ export function VlmArbitrationPanel({
           type="button"
           className="vlm-run-btn vlm-run-btn-primary"
           disabled={jobRunning}
-          onClick={() => onRunVlm("both", { damagedOnly })}
+          onClick={() => onRunVlm("both", runOptions)}
         >
           {hasResults ? "Re-run VLM" : "Run VLM"}
         </button>
@@ -289,7 +386,7 @@ export function VlmArbitrationPanel({
           type="button"
           className="vlm-run-btn"
           disabled={jobRunning}
-          onClick={() => onRunVlm("discrepancy", { damagedOnly })}
+          onClick={() => onRunVlm("discrepancy", runOptions)}
         >
           Footprints
         </button>
@@ -297,7 +394,7 @@ export function VlmArbitrationPanel({
           type="button"
           className="vlm-run-btn"
           disabled={jobRunning}
-          onClick={() => onRunVlm("damage", { damagedOnly })}
+          onClick={() => onRunVlm("damage", runOptions)}
         >
           Damage
         </button>
@@ -307,18 +404,37 @@ export function VlmArbitrationPanel({
           </button>
         ) : null}
       </div>
-      <label className="vlm-run-option">
-        <input
-          type="checkbox"
-          checked={damagedOnly}
-          disabled={jobRunning}
-          onChange={(event) => setDamagedOnly(event.target.checked)}
-        />
-        Footprints: damaged discrepancies only
-        <span className="vlm-run-option-hint">
-          (skip no_damage / no_damage_inferred)
-        </span>
-      </label>
+      <div className="vlm-run-options-row">
+        <label className="vlm-run-option">
+          Count
+          <select
+            className="vlm-limit-select"
+            value={String(limitChoice)}
+            disabled={jobRunning}
+            onChange={(event) => setLimitChoice(Number(event.target.value))}
+            aria-label="Number of buildings to review"
+          >
+            <option value="2">2</option>
+            <option value="4">4</option>
+            <option value="8">8</option>
+            <option value="16">16</option>
+            <option value="32">32</option>
+            <option value="0">All</option>
+          </select>
+        </label>
+        <label className="vlm-run-option">
+          <input
+            type="checkbox"
+            checked={damagedOnly}
+            disabled={jobRunning}
+            onChange={(event) => setDamagedOnly(event.target.checked)}
+          />
+          Footprints: damaged discrepancies only
+          <span className="vlm-run-option-hint">
+            (skip no_damage / no_damage_inferred)
+          </span>
+        </label>
+      </div>
       {vlmJob && (
         <p
           className={`vlm-run-status${jobFailed ? " vlm-run-status-error" : ""}${
@@ -385,14 +501,17 @@ export function VlmArbitrationPanel({
             VLM reviews <strong>pre + post</strong> chips for buildings already labeled{" "}
             <code>destroyed</code>: 6 paired geometric views vote on recommendation, then the model
             synthesizes final pre/post descriptions and rationale on the original pair. Buildings
-            rejected in footprint review are skipped.
+            rejected in footprint review are skipped. Use <strong>Agree</strong> / <strong>Reject</strong>{" "}
+            on the default answer to collect DPO preferences (Reject selects the opposite hypothesis).
             {damage?.ensemble_enabled === false ? " Last run used single-view mode." : null}
             {damage?.dry_run ? " Last run was dry-run (no VLM calls)." : null}
           </>
         ) : (
           <>
             VLM reviews <strong>pre-disaster</strong> chips for footprint discrepancies with an
-            augmented-view ensemble, then synthesizes a final description and rationale.
+            augmented-view ensemble, then synthesizes a final description and rationale. The panel
+            shows the <strong>default VLM answer</strong>; Agree / Reject records preference pairs
+            for Visual Verifier DPO.
             {discrepancy?.dry_run ? " Last run was dry-run (no VLM calls)." : null}
           </>
         )}
@@ -431,12 +550,14 @@ export function VlmArbitrationPanel({
               key={`dmg-${row.feature_id}`}
               row={row}
               onShowBuildingOnMap={onShowBuildingOnMap}
+              onVlmPreference={onVlmPreference}
             />
           ) : (
             <DiscrepancyCard
               key={`disc-${row.feature_id}`}
               row={row}
               onShowBuildingOnMap={onShowBuildingOnMap}
+              onVlmPreference={onVlmPreference}
             />
           ),
         )}

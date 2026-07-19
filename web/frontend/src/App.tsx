@@ -11,6 +11,7 @@ import {
   getServerSession,
   cancelAssessmentJob,
   startVlmReview,
+  submitVlmPreference,
   uploadAssessment,
   LLM_MODEL_OPTIONS,
   type AoiDetail,
@@ -540,7 +541,7 @@ export default function App() {
 
   async function handleRunVlm(
     mode: VlmReviewMode,
-    options?: { damagedOnly?: boolean },
+    options?: { damagedOnly?: boolean; limit?: number },
   ) {
     if (!selectedAoiId || vlmBusy) return;
     setError(null);
@@ -548,7 +549,7 @@ export default function App() {
     try {
       const job = await startVlmReview(selectedAoiId, {
         mode,
-        limit: 8,
+        limit: options?.limit ?? 2,
         damagedOnly: options?.damagedOnly ?? true,
         sessionId: activeSessionId,
       });
@@ -574,6 +575,21 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to stop VLM review");
     }
+  }
+
+  async function handleVlmPreference(
+    reviewType: "discrepancy" | "damage",
+    featureId: string,
+    decision: "agree" | "disagree",
+  ) {
+    if (!selectedAoiId) return;
+    await submitVlmPreference(selectedAoiId, {
+      reviewType,
+      featureId,
+      decision,
+      sessionId: activeSessionId,
+    });
+    await refreshSelectedDetail();
   }
 
   const hospitals = (detail?.hospitals?.hospitals ?? []) as Hospital[];
@@ -638,6 +654,7 @@ export default function App() {
                 externalMapFocus={chatMapFocus}
                 onRunVlm={handleRunVlm}
                 onStopVlm={handleStopVlm}
+                onVlmPreference={handleVlmPreference}
                 vlmJob={vlmJob}
                 vlmBusy={vlmBusy}
               />

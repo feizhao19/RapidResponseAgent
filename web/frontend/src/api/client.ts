@@ -72,6 +72,17 @@ export type VlmJudgment = {
   building_damaged?: boolean | string | null;
   recommendation?: string;
   needs_field_check?: boolean;
+  hypothesis?: string;
+  hypothesis_source?: string;
+  prompted_from_default?: string;
+};
+
+export type VlmHumanPreference = {
+  decision?: "agree" | "disagree" | string;
+  chosen_role?: "default" | "counterfactual" | string;
+  rejected_role?: "default" | "counterfactual" | string;
+  created_at?: string;
+  session_id?: string | null;
 };
 
 export type VlmArbitrationResult = {
@@ -86,6 +97,9 @@ export type VlmArbitrationResult = {
   post_chip_url?: string;
   properties?: Record<string, unknown>;
   vlm?: VlmJudgment;
+  default_response?: VlmJudgment;
+  counterfactual?: VlmJudgment;
+  human_preference?: VlmHumanPreference | null;
   ensemble?: VlmEnsembleSummary;
   vlm_raw?: string;
   error?: string | null;
@@ -372,9 +386,30 @@ export async function startVlmReview(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       mode: options?.mode ?? "both",
-      limit: options?.limit ?? 8,
+      limit: options?.limit ?? 2,
       damaged_only: options?.damagedOnly ?? true,
       session_id: options?.sessionId,
+    }),
+  });
+}
+
+export async function submitVlmPreference(
+  aoiId: string,
+  input: {
+    reviewType: "discrepancy" | "damage";
+    featureId: string;
+    decision: "agree" | "disagree";
+    sessionId?: string;
+  },
+): Promise<Record<string, unknown>> {
+  return fetchJson(`/api/aois/${encodeURIComponent(aoiId)}/vlm-preference`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      review_type: input.reviewType,
+      feature_id: input.featureId,
+      decision: input.decision,
+      session_id: input.sessionId,
     }),
   });
 }
