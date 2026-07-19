@@ -51,7 +51,7 @@ Two [NOAA ERI](https://storms.ngs.noaa.gov/) pre/post image pairs from the **Cal
 
 ## Project layout
 
-> In **RapidResponseAgent**, this package lives under `perception/` (vision models). Agent orchestration lives in `geoagent/`.
+> In **RapidResponseAgent**, this package lives under `perception/` (vision models). Agent orchestration lives in `geoagent/` (available by request from the author; see the root README License contact).
 
 ```
 perception/
