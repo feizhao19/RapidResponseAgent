@@ -4,7 +4,9 @@
 
 RapidResponseAgent is an agentic runtime that transforms raw remote-sensing imagery into actionable disaster intelligence. Rather than treating perception and reasoning as independent stages, it combines vision models, verification agents, geospatial analytics, and language models into a unified workflow for emergency response.
 
-The pipeline begins with **ViPDE**, which performs large-scale building damage assessment from paired pre- and post-disaster imagery. Instead of accepting every prediction as final, a **Vision-Language Agent** reviews uncertain or inconsistent cases, verifies discrepancies using multimodal reasoning, and refines assessment results before they become reusable disaster assessment artifacts.
+The pipeline begins with **ViPDE**, which performs large-scale building damage assessment from paired pre- and post-disaster imagery. Instead of accepting every prediction as final, a **Vision-Language Agent** (Visual Verifier) reviews uncertain or inconsistent cases, verifies discrepancies using multimodal reasoning, and refines assessment results before they become reusable disaster assessment artifacts.
+
+Reviewers can **Agree** or **Reject** each Verifier recommendation in the UI. The system records preferences against ensemble views and a forced counterfactual hypothesis, then exports them as DPO pairs to optionally fine-tune a LoRA adapter that steers subsequent VLM review.
 
 These verified artifacts are then consumed by downstream reasoning agents, enabling low-latency multi-turn question answering, infrastructure analysis, and report generation without rerunning expensive visual inference.
 
@@ -57,6 +59,7 @@ The runtime coordinates:
 
 - **ViPDE** for large-scale building damage assessment
 - **VLM verification agents** for discrepancy detection and multimodal reasoning
+- **Human preference feedback** (Agree / Reject) → DPO pairs → optional LoRA Visual Verifier adapter
 - Structured damage analytics
 - Geospatial facility lookup
 - **RAG + locally deployed LLMs** over cached assessment artifacts
@@ -73,7 +76,8 @@ We will **gradually release** more of this work over time (including withheld pi
 | Capability | Description |
 |------------|-------------|
 | **Damage assessment** | Align pre/post imagery → run **ViPDE** pixel damage perception → fuse with official building footprints (LARIAC) |
-| **VLM review** | Llama Vision double-checks footprint mismatches and “destroyed” labels with pre/post chips |
+| **VLM review** | Llama Vision double-checks footprint mismatches and predicted damage with pre/post chips (ensemble views) |
+| **Visual Verifier feedback** | Agree / Reject each recommendation; stores preference pools + counterfactuals for DPO fine-tuning |
 | **Map + panels** | Leaflet map with imagery overlays, damage polygons, hospitals, region stats, and assessment report |
 | **Grounded chat** | Multi-turn Q&A scoped to the active AOI: damage stats, hospitals, weather, historical RAG, report generation |
 | **New assessments** | Upload post (and optional pre) GeoTIFF, or auto-match pre from a local Maxar catalog, and run the full pipeline |
@@ -168,8 +172,30 @@ More detail: [`web/README.md`](web/README.md).
 1. Start a chat session and select an indexed AOI (or upload imagery for a **new assessment**).
 2. Wait for the pipeline job (`aligning` → `running` → `completed`).
 3. Explore the map: pre/post imagery, building polygons by damage class, hospitals.
-4. Open **stats / report / hospitals** panels as needed.
-5. Ask grounded questions, e.g. damage counts for the active AOI, nearest hospitals, weather outlook, or a comparison to a past case.
+4. Run **VLM Building Review** on footprints and/or predicted damage; use **Agree** / **Reject** to label Verifier recommendations.
+5. Open **stats / report / hospitals** panels as needed.
+6. Ask grounded questions, e.g. damage counts for the active AOI, nearest hospitals, weather outlook, or a comparison to a past case.
+
+---
+
+## Visual Verifier preferences → DPO (optional)
+
+Human feedback turns VLM review into a preference-learning loop:
+
+1. **Default answer** — the Verifier’s ensemble recommendation is shown in the UI.
+2. **Counterfactual** — the system always prepares the opposite damage hypothesis so both accept and reject pools stay non-empty.
+3. **Agree / Reject** — Agree keeps the default as chosen and the counterfactual as rejected; Reject flips them. All ensemble views are labeled relative to the preferred recommendation.
+4. **Export** — preference JSONL under `data/vlm_preferences/` expands to `accept × reject` pairs (`data/vlm_dpo/dpo_pairs.jsonl`).
+5. **Train & apply** — LoRA DPO on Llama 3.2 11B Vision; set `VLM_DPO_ADAPTER` to the adapter directory and restart the API so the next VLM review loads it.
+
+```bash
+pip install -r requirements-dpo.txt
+python scripts/run_vlm_dpo_pipeline.py --export-only   # prepare pairs
+python scripts/run_vlm_dpo_pipeline.py --train         # CUDA machine
+export VLM_DPO_ADAPTER=/path/to/RapidResponseAgent/data/vlm_dpo/runs/latest/adapter
+```
+
+Shared helpers live in `web/api/vlm_preferences.py` and `web/api/vlm_dpo_dataset.py`. More detail: [`scripts/README.md`](scripts/README.md). Offline training CLIs may be omitted in some public snapshots; contact the author if you need the full script set.
 
 ---
 
@@ -184,6 +210,7 @@ More detail: [`web/README.md`](web/README.md).
 - Conda env **`sam`** for ViPDE + API (`./web/run_api.sh` uses `sam` if no `.venv`)
 - Put **`HF_TOKEN`** in `.env` after accepting Meta licenses
 - Prefer caching weights under `RapidResponseAgent/.cache/` (via `scripts/project_env.sh` or `HF_HOME`)
+- Optional Visual Verifier adapter: set **`VLM_DPO_ADAPTER`** (see `.env.example`) after DPO training
 
 ---
 
