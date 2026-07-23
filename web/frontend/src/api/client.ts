@@ -169,6 +169,12 @@ export type AskResponse = {
   steps_run?: string[];
   active_aoi_id?: string;
   episode_id?: string;
+  route?: {
+    l1?: string;
+    l2?: string;
+    l3?: string;
+    legacy_intent?: string;
+  };
   historical?: Record<string, unknown>;
   weather?: Record<string, unknown>;
   pipeline?: Record<string, unknown>;
@@ -327,6 +333,108 @@ export async function askRapidResponseAgent(
     }),
     signal: options?.signal,
   });
+}
+
+export type AskStreamHandlers = {
+  onStatus?: (message: string) => void;
+  onToken?: (text: string) => void;
+  onDone?: (response: AskResponse) => void;
+  onError?: (detail: string) => void;
+};
+
+/** Token-streaming ask via SSE (`text/event-stream`). */
+export async function askRapidResponseAgentStream(
+  question: string,
+  options: {
+    useLlm?: boolean;
+    retrieveOnly?: boolean;
+    model?: LlmModelId;
+    sessionId?: string;
+    activeAoiId?: string;
+    history?: ChatTurn[];
+    signal?: AbortSignal;
+  } & AskStreamHandlers,
+): Promise<AskResponse> {
+  const response = await fetch("/api/ask/stream", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({
+      question,
+      session_id: options.sessionId,
+      active_aoi_id: options.activeAoiId || undefined,
+      history: options.history ?? [],
+      use_llm: options.useLlm ?? true,
+      retrieve_only: options.retrieveOnly ?? false,
+      model: options.model,
+    }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
+  }
+
+  if (!response.body) {
+    throw new Error("Streaming response has no body");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResponse: AskResponse | null = null;
+  let streamError: string | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
+    for (const chunk of chunks) {
+      const line = chunk
+        .split("\n")
+        .map((row) => row.trimEnd())
+        .find((row) => row.startsWith("data:"));
+      if (!line) continue;
+      const raw = line.slice(5).trimStart();
+      if (!raw) continue;
+      let event: { type?: string; text?: string; message?: string; response?: AskResponse; detail?: string };
+      try {
+        event = JSON.parse(raw) as typeof event;
+      } catch {
+        continue;
+      }
+      if (event.type === "status" && event.message) {
+        options.onStatus?.(event.message);
+      } else if (event.type === "token" && typeof event.text === "string") {
+        options.onToken?.(event.text);
+      } else if (event.type === "done" && event.response) {
+        finalResponse = event.response;
+        options.onDone?.(event.response);
+      } else if (event.type === "error") {
+        streamError = event.detail || "Stream failed";
+        options.onError?.(streamError);
+      }
+    }
+  }
+
+  if (streamError) {
+    throw new Error(streamError);
+  }
+  if (!finalResponse) {
+    throw new Error("Stream ended without a final response");
+  }
+  return finalResponse;
 }
 
 export function dataAssetUrl(relPath: string): string {

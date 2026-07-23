@@ -60,6 +60,7 @@ class AskResponse(BaseModel):
     steps_run: list[str] = Field(default_factory=list)
     active_aoi_id: str | None = None
     episode_id: str | None = None
+    route: dict[str, Any] | None = None
     historical: dict[str, Any] | None = None
     weather: dict[str, Any] | None = None
     pipeline: dict[str, Any] | None = None

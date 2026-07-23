@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from web.api.models import (
@@ -26,6 +26,7 @@ from web.api.services import (
     get_building_chip,
     get_buildings_geojson_wgs84,
     get_imagery_preview,
+    iter_ask_events,
     list_aois,
     remove_aoi,
     resolve_data_file,
@@ -181,6 +182,34 @@ def api_ask(body: AskRequest) -> AskResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/api/ask/stream")
+def api_ask_stream(body: AskRequest) -> StreamingResponse:
+    """Server-sent events for token-by-token chat answers."""
+    import json
+
+    def event_bytes():
+        for event in iter_ask_events(
+            body.question.strip(),
+            history=[turn.model_dump() for turn in body.history],
+            session_id=body.session_id,
+            active_aoi_id=body.active_aoi_id,
+            use_llm=body.use_llm,
+            retrieve_only=body.retrieve_only,
+            intent_only=body.intent_only,
+            model=body.model,
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_bytes(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
 @app.post("/api/assessments/upload", response_model=AssessmentJobResponse)
 async def api_assessment_upload(
     post: UploadFile = File(..., description="Post-disaster GeoTIFF"),
@@ -192,7 +221,7 @@ async def api_assessment_upload(
     if pre is None and not auto_match_pre:
         raise HTTPException(
             status_code=400,
-            detail="Upload a pre GeoTIFF or set auto_match_pre=true to search the local Maxar catalog.",
+            detail="Upload a pre GeoTIFF or set auto_match_pre=true to resolve pre imagery (Maxar Open, local Maxar, NAIP, USGS, NOAA).",
         )
     try:
         payload = await submit_assessment_upload(

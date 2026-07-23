@@ -75,12 +75,12 @@ We will **gradually release** more of this work over time (including withheld pi
 
 | Capability | Description |
 |------------|-------------|
-| **Damage assessment** | Align pre/post imagery → run **ViPDE** pixel damage perception → fuse with official building footprints (LARIAC) |
+| **Damage assessment** | Align pre/post imagery → run **ViPDE** pixel damage perception → fuse with official building footprints (**Overture** by default; LARIAC optional) |
 | **VLM review** | Llama Vision double-checks footprint mismatches and predicted damage with pre/post chips (ensemble views) |
 | **Visual Verifier feedback** | Agree / Reject each recommendation; stores preference pools + counterfactuals for DPO fine-tuning |
 | **Map + panels** | Leaflet map with imagery overlays, damage polygons, hospitals, region stats, and assessment report |
 | **Grounded chat** | Multi-turn Q&A scoped to the active AOI: damage stats, hospitals, weather, historical RAG, report generation |
-| **New assessments** | Upload post (and optional pre) GeoTIFF, or auto-match pre from a local Maxar catalog, and run the full pipeline |
+| **New assessments** | Upload post (and optional pre) GeoTIFF, or auto-match pre (**Maxar Open → local Maxar → NAIP → USGS ImageServer → USGS EarthExplorer/NAIP+ → NOAA Digital Coast**) and run the full pipeline |
 
 Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases (e.g. Altadena / Topanga-area quads such as `maxar_031311103033`).
 
@@ -104,7 +104,7 @@ Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases 
 | Layer | Choices |
 |-------|---------|
 | Perception | **ViPDE** (SAM / ViT-B), PyTorch, CUDA |
-| Fusion / GIS | rasterio, geopandas, LARIAC footprints |
+| Fusion / GIS | rasterio, geopandas, **Overture** footprints (LARIAC optional) |
 | Orchestration | LangGraph + LangChain |
 | LLMs | Local Llama 3.2 **1B** / Llama 3.1 **8B** / Llama 3.2 **11B Vision** (Hugging Face) |
 | RAG | sentence-transformers over assessment artifacts |

@@ -9,6 +9,23 @@ from geoagent.runtime.memory import SessionStore
 
 _store = SessionStore()
 
+# Keep chat messages usable; full report usually fits well under this.
+_MAX_REPORT_CHARS = 60_000
+
+
+def _load_report_markdown(assessment_report: str | None) -> str | None:
+    if not assessment_report:
+        return None
+    path = Path(assessment_report)
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return None
+    if len(text) > _MAX_REPORT_CHARS:
+        text = text[:_MAX_REPORT_CHARS].rstrip() + "\n\n… (report truncated)"
+    return text
+
 
 def format_assessment_completion_message(
     *,
@@ -25,11 +42,18 @@ def format_assessment_completion_message(
         "**Overall progress: 100/100**",
     ]
     if valid_pair_coverage is not None:
+        lines.append("")
         lines.append(f"Valid pair coverage: **{valid_pair_coverage * 100:.1f}%**")
+    lines.append("")
     lines.append(f"Results for **{aoi_id}** are loaded on the right.")
-    if assessment_report and Path(assessment_report).is_file():
-        lines.append(f"Report: `{assessment_report}`")
-    return "\n\n".join(lines)
+
+    report_md = _load_report_markdown(assessment_report)
+    if report_md:
+        lines.extend(["", "---", "", report_md])
+    elif assessment_report:
+        lines.extend(["", f"Report path: `{assessment_report}`"])
+
+    return "\n".join(lines)
 
 
 def bind_completed_assessment(

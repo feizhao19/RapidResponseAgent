@@ -203,6 +203,10 @@ def _run_pipeline_work(item: PipelineWorkItem) -> None:
             "aligned_dir": str(aligned_dir.resolve()),
             "aoi_id": aoi_id,
             "skip_preprocess": True,
+            # VLM needs CUDA (~20GB); keep optional via UI "Run VLM" after assessment.
+            "skip_vlm_arbitrate": True,
+            "fusion_mode": "max",
+            "footprint_source": "overture",
             "event": "la_wildfires_jan2025",
             "vipde_python": vipde_python,
             "_progress_emit": make_progress_emit(job_id),

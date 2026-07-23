@@ -1,35 +1,38 @@
 ---
 name: intent-router
-description: Classify RapidResponseAgent user input into historical assessment, new imagery analysis, or weather advisory routes. Use when routing natural-language requests in geoagent.graph.run --ask or implementing intent classification.
+description: Classify RapidResponseAgent user input with hierarchical L1/L2/L3 routing (session mode → capability → action). Use when routing natural-language requests in geoagent.graph.run --ask or implementing intent classification.
 ---
 
 # RapidResponseAgent Intent Router
 
-Read `geoagent/skills/intent_router.md` for the full intent contract and JSON schema.
+Read `geoagent/skills/intent_router.md` for the full layer contract.
+
+Implementation: `geoagent/tools/hierarchical_router.py` (rules-first). Legacy flat intents are derived for API compatibility via `geoagent/tools/intent_router.py`. Web turns execute on `geoagent/graph/chat_graph.py`.
+
+**Unit of work:** one imagery AOI = one past assessment (no event-level rollups).
 
 ## When to use
 
 - User sends natural language without `--question`, `--quad`, or `--weather`
-- Implementing or debugging `geoagent.tools.intent_router`
-- Adding new routing signals or slots
+- Implementing or debugging hierarchical routing
+- Adding new L2 domains or L3 actions
 
-## Routes
+## Layers
 
-| Intent | Downstream |
-|--------|------------|
-| `historical_assessment` | Historical RAG + numeric verifier |
-| `new_assessment` | AOI pipeline (requires quad or aligned_dir) |
-| `weather_context` | Open-Meteo advisory (not assessment stats) |
-| `clarify` | Ask user to disambiguate |
+| Layer | Values |
+|-------|--------|
+| L1 | `meta`, `chat_qa`, `new_pipeline` |
+| L2 | `capability`, `damage_stats`, `hospitals`, `weather`, `report`, `assessment_overview`, `pipeline_run`, `none` |
+| L3 | `inform`, `count`, `list`, `nearest`, `forecast`, `summarize`, `full`, `start`, `status`, `general` |
 
 ## Session mode (web chat)
 
-Once a conversation has entered **historical Q&A** (past assessment lookup), it **must not** route to `new_assessment` in the same session. Return `clarify` and tell the user to click **+ New chat** for uploads or new pipeline runs. Full rules live in `geoagent/skills/intent_router.md` under **Chat session modes**.
+Once a conversation has entered **historical Q&A**, do **not** route to `new_pipeline` in the same session. Return meta/clarify and tell the user to click **+ New chat**.
 
 ## CLI
 
 ```bash
 python -m geoagent.graph.run --ask "Topanga damaged count" --intent-only
-python -m geoagent.graph.run --ask "wind forecast for Topanga"
-python -m geoagent.graph.run --ask "analyze quad 031311102212" --skip-preprocess --resume
+python -m geoagent.graph.run --ask "What is the wind forecast for Topanga?"
+python -m geoagent.graph.run --ask "Analyze quad 031311102212" --skip-preprocess --resume
 ```

@@ -79,3 +79,6 @@ logs/
 tmp/
 temp/
 .cache/
+
+# Local third-party reference checkout — never commit/push
+reference_work/

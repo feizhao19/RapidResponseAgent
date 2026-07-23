@@ -37,7 +37,7 @@ PIPELINE_STEP_LABELS: dict[str, str] = {
     "location": "Resolving location (geocoding)",
     "perception": "ViPDE damage perception",
     "fusion": "Fusing damage to building footprints",
-    "vlm_arbitrate": "VLM reviewing footprints and predicted damage",
+    "vlm_arbitrate": "VLM review (optional)",
     "stats": "Computing AOI statistics",
     "facilities": "Looking up nearest hospitals",
     "report": "Generating assessment report",

@@ -291,13 +291,13 @@ export const BUILDING_SCOPE_LABELS: Record<BuildingScope, string> = {
 };
 
 export const BUILDING_SCOPE_STATS_CAPTION: Record<BuildingScope, string> = {
-  official: "LARIAC footprints",
-  fused: "LARIAC + ViPDE extras (reference)",
+  official: "Official footprints",
+  fused: "Official + ViPDE extras (reference)",
   vlm: "Final inventory after VLM footprint + damage review",
 };
 
 export const BUILDING_SCOPE_HINTS: Record<BuildingScope, string> = {
-  official: "LARIAC6 building polygons only (primary assessment view).",
+  official: "Official building polygons only (primary assessment view).",
   fused: "Official footprints plus extra ViPDE-detected structures outside the inventory (reference).",
   vlm: "Final result: fused inventory with VLM accept/reject for extras and destroyed verification.",
 };

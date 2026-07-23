@@ -5,20 +5,20 @@ import {
   type BuildingScope,
 } from "../buildingScope";
 
-type DamageSummary = {
-  damaged_count?: number;
-  damaged_pct?: number;
-  severe_count?: number;
-  severe_pct?: number;
-  destroyed_count?: number;
-  destroyed_pct?: number;
-};
+type LevelRow = { count?: number; pct?: number };
 
 type Props = {
   detail: AoiDetail | null;
   buildingScope: BuildingScope;
   buildingsGeojson?: GeoJSON.FeatureCollection | null;
 };
+
+const LEVEL_CARDS: Array<{ key: string; label: string; hint: string }> = [
+  { key: "no_damage", label: "No damage", hint: "Includes inferred no-damage when applicable" },
+  { key: "minor", label: "Minor damage", hint: "ViPDE / effective level 2" },
+  { key: "major", label: "Major damage", hint: "ViPDE / effective level 3" },
+  { key: "destroyed", label: "Destroyed", hint: "ViPDE / effective level 4" },
+];
 
 function fmtCountPct(count?: number, pct?: number): string {
   if (count == null) return "—";
@@ -31,13 +31,13 @@ export function StatsPanel({ detail, buildingScope, buildingsGeojson }: Props) {
 
   const scopeStats = resolveBuildingScopeStats(detail, buildingScope, buildingsGeojson);
   const summary = detail.summary ?? {};
-  const damage = scopeStats?.damage_summary ?? (summary as DamageSummary);
   const buildings = scopeStats?.buildings;
+  const levels = (scopeStats?.by_effective_level ?? {}) as Record<string, LevelRow>;
   const loc = detail.location as { display_name?: string; city?: string; county?: string } | undefined;
 
   const totalHint =
     buildingScope === "official"
-      ? "LARIAC6 official footprints in this AOI"
+      ? "Official footprints in this AOI"
       : buildingScope === "vlm"
         ? `${buildings?.official ?? "—"} kept official + ${buildings?.detected_orphan_damage ?? "—"} VLM-accepted extras`
         : `${buildings?.official ?? "—"} official + ${buildings?.detected_orphan_damage ?? "—"} detected extra`;
@@ -48,21 +48,14 @@ export function StatsPanel({ detail, buildingScope, buildingsGeojson }: Props) {
       value: String(buildings?.total ?? summary.buildings_total ?? "—"),
       hint: totalHint,
     },
-    {
-      label: "Damaged",
-      value: fmtCountPct(damage.damaged_count, damage.damaged_pct),
-      hint: "Minor + major + destroyed",
-    },
-    {
-      label: "Severe",
-      value: fmtCountPct(damage.severe_count, damage.severe_pct),
-      hint: "Major + destroyed",
-    },
-    {
-      label: "Destroyed",
-      value: fmtCountPct(damage.destroyed_count, damage.destroyed_pct),
-      hint: "Highest damage level only (subset of damaged)",
-    },
+    ...LEVEL_CARDS.map((card) => {
+      const row = levels[card.key] ?? {};
+      return {
+        label: card.label,
+        value: fmtCountPct(row.count, row.pct),
+        hint: card.hint,
+      };
+    }),
   ];
 
   return (

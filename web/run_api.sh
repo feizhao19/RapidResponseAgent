@@ -65,4 +65,15 @@ elif find "$FRONTEND_DIR/src" -type f -newer "$FRONTEND_DIST" -print -quit | gre
   (cd "$FRONTEND_DIR" && npm run build) >&2
 fi
 
-exec uvicorn web.api.main:app --reload --host "$HOST" --port "$PORT"
+# Prefer the active interpreter explicitly so conda `uvicorn` / stale venv
+# console-script shebangs (e.g. after a directory rename) cannot hijack the API.
+API_PYTHON="${VIRTUAL_ENV:+$VIRTUAL_ENV/bin/python}"
+if [[ -z "${API_PYTHON}" || ! -x "${API_PYTHON}" ]]; then
+  if [[ -x "$ROOT/.venv/bin/python" ]]; then
+    API_PYTHON="$ROOT/.venv/bin/python"
+  else
+    API_PYTHON="$(command -v python)"
+  fi
+fi
+echo "API will use: ${API_PYTHON}" >&2
+exec "${API_PYTHON}" -m uvicorn web.api.main:app --reload --host "$HOST" --port "$PORT"

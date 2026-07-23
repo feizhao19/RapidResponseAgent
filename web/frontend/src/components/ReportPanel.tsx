@@ -61,7 +61,7 @@ export function ReportPanel({
               <figcaption>
                 Post-disaster overlay
                 {buildingScope === "official" && (
-                  <> — imagery overlays may include detected structures outside LARIAC footprints</>
+                  <> — imagery overlays may include detected structures outside official footprints</>
                 )}
               </figcaption>
             </figure>

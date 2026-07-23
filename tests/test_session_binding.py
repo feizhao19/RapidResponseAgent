@@ -20,6 +20,23 @@ class SessionBindingTests(unittest.TestCase):
         self.assertIn("**Assessment completed**", text)
         self.assertIn("upload_abc123", text)
 
+    def test_format_completion_message_includes_report_body(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "assessment_report_official.md"
+            report.write_text(
+                "# Post-Disaster Building Damage Assessment\n\n"
+                "- Official building polygons in AOI: **12**\n",
+                encoding="utf-8",
+            )
+            text = format_assessment_completion_message(
+                aoi_id="upload_abc123",
+                job_id="job_test",
+                assessment_report=str(report),
+            )
+            self.assertIn("# Post-Disaster Building Damage Assessment", text)
+            self.assertIn("Official building polygons in AOI: **12**", text)
+            self.assertNotIn(f"Report: `{report}`", text)
+
     def test_bind_completed_assessment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = SessionStore(root=Path(tmp))

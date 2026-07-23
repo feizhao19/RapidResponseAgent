@@ -271,7 +271,9 @@ export function ChatPanel({
           <div className="chat-action-panel-header">
             <strong className="chat-action-panel-title">Past assessments</strong>
             <span className="chat-action-panel-hint">
-              {records.length === 0 ? "None yet" : `${records.length} completed`}
+              {records.length === 0
+                ? "None yet — each image area is one assessment"
+                : `${records.length} AOI${records.length === 1 ? "" : "s"}`}
             </span>
           </div>
           <label className="chat-action-panel-field">
@@ -326,14 +328,17 @@ export function ChatPanel({
         <div className="chat-history" ref={chatHistoryRef}>
           {messages.length === 0 && (
             <div className="message assistant">
-              Attach a post-disaster GeoTIFF below and Send to run a new assessment, or ask about
-              past assessments and weather.
+              Attach a post-disaster GeoTIFF below and Send to run a new assessment (one image area
+              = one past assessment), or select a past assessment and ask about that AOI — damage
+              stats, hospitals, weather, or a short report.
             </div>
           )}
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`message ${message.role} ${message.meta === "Assessment" && uploadBusy ? "message-live" : ""}`}
+              className={`message ${message.role} ${
+                message.meta === "Assessment" && uploadBusy ? "message-live" : ""
+              } ${message.meta === "RapidResponseAgent" ? "message-streaming" : ""}`}
             >
               {message.meta && <div className="message-meta">{message.meta}</div>}
               {message.role === "assistant" ? (
@@ -362,7 +367,7 @@ export function ChatPanel({
                       },
                     }}
                   >
-                    {message.content}
+                    {message.content || (loading && message.meta === "RapidResponseAgent" ? "_Thinking…_" : "")}
                   </ReactMarkdown>
                 </div>
               ) : (
@@ -370,12 +375,6 @@ export function ChatPanel({
               )}
             </div>
           ))}
-          {loading && (
-            <div className="message assistant message-live">
-              <div className="message-meta">RapidResponseAgent</div>
-              Running intent router and tools…
-            </div>
-          )}
         </div>
 
         <div className="chat-composer" onClick={(event) => event.stopPropagation()}>
@@ -440,7 +439,7 @@ export function ChatPanel({
                   }
                 }}
               />
-              Auto-match pre from Maxar (Jan 2025)
+              Auto-match pre-disaster imagery
             </label>
           </div>
 

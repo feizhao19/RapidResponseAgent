@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
 import geopandas as gpd
 import numpy as np
@@ -22,7 +22,7 @@ from geoagent.graph.router import run_geoagent
 from geoagent.graph.state import PipelineState
 from geoagent.runtime.agent import run_agent_turn
 from geoagent.tools.aoi_stats import enrich_stats_with_building_scopes
-from geoagent.tools.case_label import enrich_record_with_case_label
+from geoagent.tools.case_label import enrich_records_with_case_labels, enrich_record_with_case_label
 from geoagent.tools.historical_index import DATA, DEFAULT_INDEX_PATH, delete_assessment_aoi, load_assessment_index
 from geoagent.tools.intent_router import classify_intent
 
@@ -68,7 +68,8 @@ def aligned_dir_for_record(record: dict[str, Any]) -> Path:
 
 def list_aois() -> dict[str, Any]:
     index = load_assessment_index()
-    records = [enrich_record_with_case_label(record) for record in index.get("records", [])]
+    # One imagery AOI = one past assessment; disambiguate colliding place labels.
+    records = enrich_records_with_case_labels(list(index.get("records") or []))
     return {
         "aoi_count": index.get("aoi_count", 0),
         "events": index.get("events", []),
@@ -482,3 +483,51 @@ def run_ask(
         response["answer_markdown"] = final["intent_clarification"]
 
     return response
+
+
+def iter_ask_events(
+    question: str,
+    *,
+    history: list[dict[str, str]] | None = None,
+    session_id: str | None = None,
+    active_aoi_id: str | None = None,
+    use_llm: bool = True,
+    retrieve_only: bool = False,
+    intent_only: bool = False,
+    model: str | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Yield SSE payload dicts: status / token / done / error."""
+    import queue
+    import threading
+
+    events: queue.Queue[dict[str, Any] | None] = queue.Queue()
+
+    def on_token(text: str) -> None:
+        events.put({"type": "token", "text": text})
+
+    def worker() -> None:
+        try:
+            events.put({"type": "status", "message": "RapidResponseAgent"})
+            result = run_agent_turn(
+                question,
+                session_id=session_id,
+                active_aoi_id=active_aoi_id,
+                use_llm=use_llm,
+                retrieve_only=retrieve_only,
+                intent_only=intent_only,
+                model=model,
+                client_history=history,
+                on_token=on_token,
+            )
+            events.put({"type": "done", "response": result.to_api_dict()})
+        except Exception as exc:  # noqa: BLE001 — surface to SSE client
+            events.put({"type": "error", "detail": str(exc)})
+        finally:
+            events.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+    while True:
+        item = events.get()
+        if item is None:
+            break
+        yield item
