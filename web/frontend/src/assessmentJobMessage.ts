@@ -93,7 +93,10 @@ function formatStepChecklist(progress: JobProgress | undefined, job: AssessmentJ
   return lines.join("\n\n");
 }
 
-export function formatAssessmentJobMarkdown(job: AssessmentJob): string {
+export function formatAssessmentJobMarkdown(
+  job: AssessmentJob,
+  reportMarkdown?: string | null,
+): string {
   const progress = job.progress as JobProgress | undefined;
   const lines: string[] = [];
 
@@ -154,6 +157,10 @@ export function formatAssessmentJobMarkdown(job: AssessmentJob): string {
 
   if (job.status === "completed") {
     lines.push(`Results for **${job.aoi_id}** are loaded on the right.`);
+    if (reportMarkdown?.trim()) {
+      lines.push("---");
+      lines.push(reportMarkdown.trim());
+    }
   }
 
   return lines.filter(Boolean).join("\n\n");

@@ -37,7 +37,7 @@ class ReportScopeTests(unittest.TestCase):
         official_md = paths["official"].read_text()
         fused_md = paths["fused"].read_text()
 
-        self.assertIn("Official footprints (LARIAC6 only)", official_md)
+        self.assertIn("Official footprints (inventory only)", official_md)
         self.assertIn("Official footprints + ViPDE-detected extra structures", fused_md)
         self.assertIn("Total buildings in assessment: **593**", official_md)
         self.assertIn("Total buildings in assessment: **691**", fused_md)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from geoagent.tools.chat_context import (
     ChatTurn,
@@ -15,6 +16,10 @@ from geoagent.tools.chat_context import (
 from geoagent.tools.session_guard import is_historical_qa_session
 from geoagent.tools.historical_index import build_assessment_index
 from geoagent.tools.historical_query import execute_query, filter_records, parse_natural_language
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PILOT_STATS = ROOT / "data/aligned/maxar_031311102212/aoi_out/aoi_stats.json"
 
 
 class ChatContextTests(unittest.TestCase):
@@ -44,7 +49,7 @@ class ChatContextTests(unittest.TestCase):
         query.raw_text = "how many?"
         query = enrich_query_from_history(query, history)
         self.assertEqual(query.city, "Topanga")
-        self.assertEqual(query.metric, "damaged_count")
+        self.assertEqual(query.metric, "damage_breakdown")
 
     def test_buildings_follow_up_uses_buildings_total(self) -> None:
         history = [
@@ -57,6 +62,7 @@ class ChatContextTests(unittest.TestCase):
         self.assertEqual(query.metric, "buildings_total")
         self.assertEqual(query.city, "Topanga")
 
+    @unittest.skipUnless(PILOT_STATS.is_file(), "pilot aoi_stats.json not present")
     def test_infer_aoi_from_assistant_number(self) -> None:
         index = build_assessment_index()
         records = filter_records(index, parse_natural_language("Topanga"))
@@ -66,6 +72,7 @@ class ChatContextTests(unittest.TestCase):
         ]
         self.assertEqual(infer_aoi_from_history(history, records), "upload_130ea1ac498a")
 
+    @unittest.skipUnless(PILOT_STATS.is_file(), "pilot aoi_stats.json not present")
     def test_disambiguate_prefers_pilot_aoi_for_new_city_query(self) -> None:
         index = build_assessment_index()
         query = parse_natural_language("Topanga 2025 wildfire damaged count")
@@ -73,6 +80,7 @@ class ChatContextTests(unittest.TestCase):
         records = filter_records(index, query)
         self.assertEqual(disambiguate_aoi(query, records, []), "maxar_031311102212")
 
+    @unittest.skipUnless(PILOT_STATS.is_file(), "pilot aoi_stats.json not present")
     def test_scoped_buildings_query_after_damaged_follow_up(self) -> None:
         index = build_assessment_index()
         history = [

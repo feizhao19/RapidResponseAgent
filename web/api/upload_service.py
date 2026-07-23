@@ -20,6 +20,25 @@ from web.api.jobs import (
 )
 
 
+def _start_footprint_prefetch(aligned_dir: Path) -> None:
+    """Fire-and-forget footprint cache warm after align (overlaps queue + ViPDE)."""
+    import threading
+
+    def _warm() -> None:
+        try:
+            from geoagent.tools.building_footprints import prefetch_official_footprints
+
+            prefetch_official_footprints(aligned_dir, source="overture")
+        except Exception as exc:  # noqa: BLE001 — fusion retries; never fail upload
+            print(f"Early footprint prefetch failed (will retry in pipeline): {exc}")
+
+    threading.Thread(
+        target=_warm,
+        name=f"footprint-prefetch-{aligned_dir.name}",
+        daemon=True,
+    ).start()
+
+
 async def save_upload_file(upload: UploadFile, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("wb") as handle:
@@ -109,6 +128,9 @@ async def submit_assessment_upload(
         job_id,
         {"type": "step_done", "step": "align", "message": "Alignment complete"},
     )
+
+    # Warm Overture/LARIAC cache while the job waits in queue / ViPDE runs.
+    _start_footprint_prefetch(aligned_dir)
 
     # Keep a copy of uploads alongside the job record for audit/debugging.
     archive = staging / "inputs"

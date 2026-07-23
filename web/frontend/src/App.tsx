@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  askRapidResponseAgent,
+  askRapidResponseAgentStream,
   createServerSession,
   deleteAoi,
   ensureServerSession,
@@ -294,7 +294,19 @@ export default function App() {
       role: "user",
       content: question,
     };
-    setSessions((prev) => appendSessionMessage(prev, sessionId, userMessage));
+    const assistantId = crypto.randomUUID();
+    setSessions((prev) =>
+      appendSessionMessage(
+        appendSessionMessage(prev, sessionId, userMessage),
+        sessionId,
+        {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          meta: "RapidResponseAgent",
+        },
+      ),
+    );
     setLoadingSessionId(sessionId);
     setError(null);
 
@@ -302,33 +314,62 @@ export default function App() {
     askAbortRef.current = controller;
 
     const current = sessionsRef.current.find((session) => session.id === sessionId);
-    const history = (current?.messages ?? []).slice(-8).map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
+    // sessionsRef updates after render; this still holds prior completed turns only
+    // (the current user/assistant placeholders are not flushed yet — which is what we want).
+    const historyForApi = (current?.messages ?? [])
+      .filter((message) => message.content.trim().length > 0)
+      .slice(-8)
+      .map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
 
+    let streamed = "";
     try {
-      const response = await askRapidResponseAgent(question, {
+      const response = await askRapidResponseAgentStream(question, {
         signal: controller.signal,
         sessionId,
-        history,
+        history: historyForApi,
         model: llmModel,
         activeAoiId: selectedAoiId || undefined,
+        onStatus: () => {
+          // Keep a single branded bubble; tokens replace the waiting state.
+          setSessions((prev) =>
+            upsertSessionMessage(prev, sessionId, {
+              id: assistantId,
+              role: "assistant",
+              content: streamed,
+              meta: "RapidResponseAgent",
+            }),
+          );
+        },
+        onToken: (text) => {
+          streamed += text;
+          setSessions((prev) =>
+            upsertSessionMessage(prev, sessionId, {
+              id: assistantId,
+              role: "assistant",
+              content: streamed,
+              meta: "RapidResponseAgent",
+            }),
+          );
+        },
       });
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: formatAnswer(response),
-        meta: intentMeta(response),
-      };
-      setSessions((prev) => appendSessionMessage(prev, sessionId, assistantMessage));
+      setSessions((prev) =>
+        upsertSessionMessage(prev, sessionId, {
+          id: assistantId,
+          role: "assistant",
+          content: formatAnswer(response) || streamed,
+          meta: intentMeta(response) || "RapidResponseAgent",
+        }),
+      );
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setSessions((prev) =>
-          appendSessionMessage(prev, sessionId, {
-            id: crypto.randomUUID(),
+          upsertSessionMessage(prev, sessionId, {
+            id: assistantId,
             role: "assistant",
-            content: "Generation stopped.",
+            content: streamed.trim() ? `${streamed}\n\n_Generation stopped._` : "Generation stopped.",
             meta: "cancelled",
           }),
         );
@@ -337,10 +378,10 @@ export default function App() {
       const message = err instanceof Error ? err.message : "Request failed";
       setError(message);
       setSessions((prev) =>
-        appendSessionMessage(prev, sessionId, {
-          id: crypto.randomUUID(),
+        upsertSessionMessage(prev, sessionId, {
+          id: assistantId,
           role: "assistant",
-          content: message,
+          content: streamed.trim() ? `${streamed}\n\n**Error:** ${message}` : message,
           meta: "Error",
         }),
       );
@@ -377,6 +418,23 @@ export default function App() {
       syncProgressMessage(job);
       if (terminal.has(job.status)) {
         if (job.status === "completed" && job.aoi_id) {
+          try {
+            const detail = await getAoiDetail(job.aoi_id);
+            const report =
+              detail.report_markdown_official ?? detail.report_markdown ?? null;
+            if (report) {
+              setSessions((prev) =>
+                upsertSessionMessage(prev, sessionId, {
+                  id: progressId,
+                  role: "assistant",
+                  content: formatAssessmentJobMarkdown(job, report),
+                  meta: "new_assessment",
+                }),
+              );
+            }
+          } catch {
+            // Hydrate below still loads the server completion message with report.
+          }
           setBuildingsCache((prev) => {
             const next = { ...prev };
             delete next[job.aoi_id!];

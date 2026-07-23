@@ -33,6 +33,15 @@ function isSkippableLocationPart(part: string): boolean {
   return false;
 }
 
+function shortAoiSuffix(aoiId: string | undefined, length = 4): string {
+  let text = normalize(aoiId);
+  if (!text) return "";
+  if (text.includes("_")) text = text.slice(text.lastIndexOf("_") + 1);
+  text = text.replace(/[^A-Za-z0-9]/g, "");
+  if (text.length <= length) return text;
+  return text.slice(-length);
+}
+
 function extractCommunity(record: AoiRecord): string {
   const location = record.location ?? {};
   const neighbourhood = normalize(
@@ -76,26 +85,67 @@ function extractCaseDate(record: AoiRecord): string {
     }
   }
 
-  const postImage = normalize(record.post_image);
-  const postMatch = postImage.match(/(20\d{2})(\d{2})(\d{2})/);
-  if (postMatch) {
-    return `${postMatch[1]}-${postMatch[2]}-${postMatch[3]}`;
+  const location = record.location ?? {};
+  const metaCandidates = [
+    (record as { imagery_date?: string }).imagery_date,
+    (record as { acquired_at?: string }).acquired_at,
+    (location as { imagery_date?: string }).imagery_date,
+    (location as { acquired_at?: string }).acquired_at,
+  ];
+  for (const raw of metaCandidates) {
+    const text = normalize(raw);
+    const iso = text.match(/(20\d{2})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const compact = text.match(/(20\d{2})(\d{2})(\d{2})/);
+    if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  }
+
+  const generated = normalize((record as { generated_at?: string }).generated_at);
+  const generatedMatch = generated.match(/(20\d{2})-(\d{2})-(\d{2})/);
+  if (generatedMatch) {
+    return `${generatedMatch[1]}-${generatedMatch[2]}-${generatedMatch[3]}`;
   }
 
   return "unknown-date";
 }
 
-export function formatAssessedCaseLabel(record: AoiRecord): string {
-  if (record.case_label) return record.case_label;
-
+function formatBaseLabel(record: AoiRecord, disambiguator?: string): string {
   const location = record.location ?? {};
   const community = extractCommunity(record);
   const city = normalize(location.city) || community;
   const state = normalize(location.state) || "Unknown state";
   const caseDate = extractCaseDate(record);
+  const parts =
+    community.toLowerCase() === city.toLowerCase()
+      ? [city, state, caseDate]
+      : [community, city, state, caseDate];
+  if (disambiguator) parts.push(`···${disambiguator}`);
+  return parts.join(" · ");
+}
 
-  if (community.toLowerCase() === city.toLowerCase()) {
-    return `${city} · ${state} · ${caseDate}`;
+/** Prefer API `case_label` (already disambiguated). Fallback mirrors backend rules. */
+export function formatAssessedCaseLabel(record: AoiRecord): string {
+  if (record.case_label) return record.case_label;
+  return formatBaseLabel(record);
+}
+
+/** Client-side disambiguation when API labels are missing. */
+export function formatAssessedCaseLabels(records: AoiRecord[]): Map<string, string> {
+  const base = new Map<string, string>();
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const label = record.case_label || formatBaseLabel(record);
+    base.set(record.aoi_id, label);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  return `${community} · ${city} · ${state} · ${caseDate}`;
+  const out = new Map<string, string>();
+  for (const record of records) {
+    const label = base.get(record.aoi_id) || record.aoi_id;
+    if ((counts.get(label) ?? 0) > 1 && !record.case_label) {
+      out.set(record.aoi_id, formatBaseLabel(record, shortAoiSuffix(record.aoi_id)));
+    } else {
+      out.set(record.aoi_id, label);
+    }
+  }
+  return out;
 }

@@ -36,7 +36,7 @@ class HistoricalQueryFaithfulnessTests(unittest.TestCase):
     def test_parse_topanga_damaged_count(self) -> None:
         query = parse_natural_language("Topanga 2025 wildfire damaged count")
         self.assertEqual(query.city, "Topanga")
-        self.assertEqual(query.metric, "damaged_count")
+        self.assertEqual(query.metric, "damage_breakdown")
         self.assertIsNone(query.rank_by)
 
     def test_parse_topanga_buildings_total(self) -> None:
@@ -46,41 +46,44 @@ class HistoricalQueryFaithfulnessTests(unittest.TestCase):
 
     def test_parse_statistics_request(self) -> None:
         query = parse_natural_language("what is the statistic information of this")
-        self.assertIsNone(query.metric)
+        self.assertEqual(query.metric, "damage_breakdown")
 
     def test_parse_mesa_damaged_count(self) -> None:
         query = parse_natural_language("what happened in Mesa, how many buildings are damaged")
         self.assertEqual(query.city, "Mesa")
-        self.assertEqual(query.metric, "damaged_count")
+        self.assertEqual(query.metric, "damage_breakdown")
         result = execute_query(query, index=self.index)
         self.assertEqual(result.matched_aoi_ids, ["upload_7b21cf164310"])
-        damaged = [f for f in result.facts if f.label == "damaged_count"]
-        self.assertEqual(len(damaged), 1)
-        self.assertEqual(damaged[0].value, 24)
+        destroyed = [f for f in result.facts if f.label == "destroyed"]
+        self.assertGreaterEqual(len(destroyed), 1)
 
-    def test_damaged_count_matches_stats(self) -> None:
-        query = StructuredQuery(city="Topanga", metric="damaged_count")
+    def test_damage_breakdown_matches_effective_levels(self) -> None:
+        query = StructuredQuery(city="Topanga", metric="damage_breakdown")
         result = execute_query(query, index=self.index)
         self.assertIn("maxar_031311102212", result.matched_aoi_ids)
-        metric_facts = [
-            f for f in result.facts if f.label == "summary.damaged_count" and f.aoi_id == "maxar_031311102212"
-        ]
-        self.assertEqual(len(metric_facts), 1)
-        self.assertEqual(metric_facts[0].value, self.stats["damage_summary"]["damaged_count"])
+        levels = self.stats.get("by_effective_level") or {}
+        for level in ("no_damage", "minor", "major", "destroyed"):
+            facts = [
+                f
+                for f in result.facts
+                if f.label == level and f.aoi_id == "maxar_031311102212"
+            ]
+            self.assertEqual(len(facts), 1, msg=level)
+            self.assertEqual(facts[0].value, levels[level]["count"], msg=level)
 
     def test_all_summary_numbers_match_stats(self) -> None:
         query = StructuredQuery(aoi_id="maxar_031311102212")
         result = execute_query(query, index=self.index)
-        summary = self.stats["damage_summary"]
         buildings = self.stats["buildings"]
+        levels = self.stats.get("by_effective_level") or {}
         expected = {
             "buildings_total": buildings["total"],
             "buildings_official": buildings["official"],
             "buildings_detected": buildings["detected_orphan_damage"],
-            "damaged_count": summary["damaged_count"],
-            "damaged_pct": summary["damaged_pct"],
-            "severe_count": summary["severe_count"],
-            "destroyed_count": summary["destroyed_count"],
+            "no_damage": levels["no_damage"]["count"],
+            "minor": levels["minor"]["count"],
+            "major": levels["major"]["count"],
+            "destroyed": levels["destroyed"]["count"],
         }
         for label, value in expected.items():
             facts = [f for f in result.facts if f.label == label]
@@ -88,7 +91,7 @@ class HistoricalQueryFaithfulnessTests(unittest.TestCase):
             self.assertEqual(facts[0].value, value, msg=label)
 
     def test_citations_point_at_aoi_stats(self) -> None:
-        query = StructuredQuery(city="Topanga", metric="damaged_count")
+        query = StructuredQuery(city="Topanga", metric="damage_breakdown")
         result = execute_query(query, index=self.index)
         for fact in result.facts:
             self.assertIn("aoi_stats.json#", fact.citation)

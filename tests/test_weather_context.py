@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from unittest.mock import patch
 
 from geoagent.tools.weather_context import (
     build_weather_context,
     classify_weather_topic,
+    compact_weather_facts_for_llm,
     render_weather_markdown,
 )
 
@@ -146,6 +148,27 @@ class WeatherContextTests(unittest.TestCase):
         assert loc is not None
         self.assertEqual(loc["city"], "Altadena")
         self.assertEqual(loc["aoi_id"], "maxar_altadena")
+
+    @patch("geoagent.tools.weather_context.fetch_air_quality", return_value=MOCK_AQ)
+    @patch("geoagent.tools.weather_context.fetch_nws_context", return_value=MOCK_NWS)
+    @patch("geoagent.tools.weather_context.fetch_weather_forecast", return_value=MOCK_FORECAST)
+    @patch(
+        "geoagent.tools.weather_context.resolve_location",
+        return_value={
+            "lat": 34.09,
+            "lon": -118.60,
+            "city": "Topanga",
+            "display_name": "Topanga, California",
+            "aoi_id": None,
+        },
+    )
+    def test_compact_facts_omit_hourly_arrays(self, *_mocks) -> None:
+        payload = build_weather_context(question="wind in Topanga", city="Topanga")
+        compact = compact_weather_facts_for_llm(payload)
+        self.assertIn("location", compact)
+        self.assertIn("current", compact)
+        self.assertNotIn("hourly", compact)
+        self.assertLessEqual(len(json.dumps(compact)), 2500)
 
 
 if __name__ == "__main__":

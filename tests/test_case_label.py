@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import unittest
 
-from geoagent.tools.case_label import format_assessed_case_label
+from geoagent.tools.case_label import (
+    enrich_records_with_case_labels,
+    format_assessed_case_label,
+    short_aoi_suffix,
+)
 
 
 class CaseLabelTests(unittest.TestCase):
-    def test_wildwood_topanga_with_post_image_date(self) -> None:
+    def test_wildwood_topanga_with_event_date(self) -> None:
         record = {
             "aoi_id": "maxar_031311102212",
             "event": "la_wildfires_jan2025",
@@ -58,7 +62,7 @@ class CaseLabelTests(unittest.TestCase):
             "Altadena · California · 2025-01-07",
         )
 
-    def test_event_date_beats_post_image_and_generated_at(self) -> None:
+    def test_event_date_beats_generated_at(self) -> None:
         record = {
             "aoi_id": "upload_130ea1ac498a",
             "event": "la_wildfires_jan2025",
@@ -71,17 +75,48 @@ class CaseLabelTests(unittest.TestCase):
             "2025-01-07",
         )
 
-    def test_upload_without_event_uses_post_image_date(self) -> None:
+    def test_upload_without_event_uses_generated_at_not_filename(self) -> None:
         record = {
             "aoi_id": "upload_custom",
-            "post_image": "NOAA ERI 20250128a",
+            "post_image": "/tmp/uploads/NOAA_ERI_20250128a.tif",
             "generated_at": "2026-07-05T21:26:14.709751+00:00",
             "location": {"city": "Topanga", "state": "California"},
         }
         self.assertEqual(
             format_assessed_case_label(record).split(" · ")[-1],
-            "2025-01-28",
+            "2026-07-05",
         )
+
+    def test_duplicate_labels_get_aoi_suffix(self) -> None:
+        records = [
+            {
+                "aoi_id": "upload_aaaaaaaa1111",
+                "event": "la_wildfires_jan2025",
+                "location": {"city": "Malibu", "state": "California"},
+            },
+            {
+                "aoi_id": "upload_bbbbbbbb2222",
+                "event": "la_wildfires_jan2025",
+                "location": {"city": "Malibu", "state": "California"},
+            },
+            {
+                "aoi_id": "upload_cccccccc3333",
+                "event": "la_wildfires_jan2025",
+                "location": {
+                    "city": "Topanga",
+                    "state": "California",
+                    "neighbourhood": "Wildwood",
+                },
+            },
+        ]
+        labeled = enrich_records_with_case_labels(records)
+        malibu = [item for item in labeled if "Malibu" in item["case_label"]]
+        self.assertEqual(len(malibu), 2)
+        self.assertTrue(all("···" in item["case_label"] for item in malibu))
+        self.assertNotEqual(malibu[0]["case_label"], malibu[1]["case_label"])
+        self.assertIn(short_aoi_suffix("upload_aaaaaaaa1111"), malibu[0]["case_label"] + malibu[1]["case_label"])
+        topanga = next(item for item in labeled if "Wildwood" in item["case_label"])
+        self.assertNotIn("···", topanga["case_label"])
 
 
 if __name__ == "__main__":
