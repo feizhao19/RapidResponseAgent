@@ -92,8 +92,11 @@ export function ChatPanel({
 
   useEffect(() => {
     if (!postFile) {
-      setDraft((current) => (current === lastAutoDraftRef.current ? "" : current));
+      // Capture before clearing: setDraft updater runs later and must compare
+      // against the previous auto-filled text, not an already-reset ref.
+      const previousAutoDraft = lastAutoDraftRef.current;
       lastAutoDraftRef.current = "";
+      setDraft((current) => (current === previousAutoDraft ? "" : current));
       return;
     }
 
@@ -139,11 +142,12 @@ export function ChatPanel({
   }
 
   function clearAttachments() {
+    const previousAutoDraft = lastAutoDraftRef.current;
+    lastAutoDraftRef.current = "";
     setPostFile(null);
     setPreFile(null);
     setAutoMatchPre(true);
-    setDraft((current) => (current === lastAutoDraftRef.current ? "" : current));
-    lastAutoDraftRef.current = "";
+    setDraft((current) => (current === previousAutoDraft ? "" : current));
   }
 
   function submit() {
@@ -160,6 +164,9 @@ export function ChatPanel({
         message,
       });
       clearAttachments();
+      // Always clear the composer after send (same as the chat-only path).
+      setDraft("");
+      lastAutoDraftRef.current = "";
       collapseSidebar();
       return;
     }
