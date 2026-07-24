@@ -505,9 +505,13 @@ def iter_ask_events(
     def on_token(text: str) -> None:
         events.put({"type": "token", "text": text})
 
+    def on_status(payload: dict[str, Any]) -> None:
+        event = dict(payload)
+        event.setdefault("type", "status")
+        events.put(event)
+
     def worker() -> None:
         try:
-            events.put({"type": "status", "message": "RapidResponseAgent"})
             result = run_agent_turn(
                 question,
                 session_id=session_id,
@@ -518,6 +522,7 @@ def iter_ask_events(
                 model=model,
                 client_history=history,
                 on_token=on_token,
+                on_status=on_status,
             )
             events.put({"type": "done", "response": result.to_api_dict()})
         except Exception as exc:  # noqa: BLE001 — surface to SSE client

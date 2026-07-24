@@ -120,6 +120,7 @@ def create_job(
     *,
     aoi_id: str,
     auto_match_pre: bool = False,
+    skip_facilities: bool = True,
     session_id: str | None = None,
     job_kind: str = "assessment",
 ) -> dict[str, Any]:
@@ -131,6 +132,7 @@ def create_job(
         "status": "queued",
         "job_kind": job_kind,
         "auto_match_pre": auto_match_pre,
+        "skip_facilities": skip_facilities,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "message": "Job created",
@@ -205,6 +207,8 @@ def _run_pipeline_work(item: PipelineWorkItem) -> None:
             "skip_preprocess": True,
             # VLM needs CUDA (~20GB); keep optional via UI "Run VLM" after assessment.
             "skip_vlm_arbitrate": True,
+            # Hospital/facility lookup is opt-in at upload; chat can still query on demand.
+            "skip_facilities": bool(item.skip_facilities),
             "fusion_mode": "max",
             "footprint_source": "overture",
             "event": "la_wildfires_jan2025",
@@ -346,6 +350,7 @@ def start_pipeline_job(
     aoi_id: str,
     *,
     session_id: str | None = None,
+    skip_facilities: bool = True,
 ) -> int:
     return enqueue_pipeline_job(
         job_id,
@@ -353,6 +358,7 @@ def start_pipeline_job(
         aoi_id,
         session_id=session_id,
         kind="pipeline",
+        skip_facilities=skip_facilities,
     )
 
 

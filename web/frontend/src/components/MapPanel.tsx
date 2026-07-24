@@ -137,24 +137,55 @@ function FocusMapTarget({
   buildingLayerRefs: MutableRefObject<Record<string, L.Layer>>;
 }) {
   const map = useMap();
+  const lastFocusKeyRef = useRef<number | null>(null);
+
   useEffect(() => {
-    if (!focus) return;
+    if (!focus) {
+      lastFocusKeyRef.current = null;
+      return;
+    }
+    // Only fly once per focus request — re-renders / layout tweaks must not yank the view back.
+    if (lastFocusKeyRef.current === focus.key) return;
+    lastFocusKeyRef.current = focus.key;
+
     map.invalidateSize({ pan: false });
     const [lon, lat] = focus.coordinates_wgs84;
     const targetZoom = Math.max(map.getZoom(), 15);
     map.flyTo([lat, lon], targetZoom, { duration: 0.75 });
     const timer = window.setTimeout(() => {
       if (focus.kind === "hospital") {
-        markerRefs.current[focus.hospitalKey]?.openPopup();
+        const marker = markerRefs.current[focus.hospitalKey];
+        const popup = marker?.getPopup();
+        if (popup) popup.options.autoPan = false;
+        marker?.openPopup();
         return;
       }
       const layer = buildingLayerRefs.current[focus.bldId];
+      if (layer && "getPopup" in layer && typeof layer.getPopup === "function") {
+        const popup = layer.getPopup();
+        if (popup) popup.options.autoPan = false;
+      }
       if (layer && "openPopup" in layer && typeof layer.openPopup === "function") {
         layer.openPopup();
       }
     }, 600);
     return () => window.clearTimeout(timer);
   }, [focus, map, markerRefs, buildingLayerRefs]);
+
+  // After the user pans away, close popups so later invalidateSize / UI toggles
+  // cannot autoPan the map back to the previously focused feature.
+  useEffect(() => {
+    function onUserMove() {
+      map.closePopup();
+    }
+    map.on("dragstart", onUserMove);
+    map.on("zoomstart", onUserMove);
+    return () => {
+      map.off("dragstart", onUserMove);
+      map.off("zoomstart", onUserMove);
+    };
+  }, [map]);
+
   return null;
 }
 
@@ -191,10 +222,10 @@ function MapResizeHandler() {
   useEffect(() => {
     const target = map.getContainer().closest(".map-wrap") ?? map.getContainer();
     const observer = new ResizeObserver(() => {
-      map.invalidateSize();
+      map.invalidateSize({ pan: false });
     });
     observer.observe(target);
-    map.invalidateSize();
+    map.invalidateSize({ pan: false });
     return () => observer.disconnect();
   }, [map]);
   return null;

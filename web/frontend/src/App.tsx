@@ -14,6 +14,7 @@ import {
   submitVlmPreference,
   uploadAssessment,
   LLM_MODEL_OPTIONS,
+  type ActivityItem,
   type AoiDetail,
   type AoiRecord,
   type AssessmentJob,
@@ -23,6 +24,7 @@ import {
   type LlmModelId,
   type VlmReviewMode,
 } from "./api/client";
+import { applyActivityStatus, finalizeActivity } from "./activityStatus";
 import {
   appendSessionMessage,
   createChatSession,
@@ -325,6 +327,7 @@ export default function App() {
       }));
 
     let streamed = "";
+    let activity: ActivityItem[] = [];
     try {
       const response = await askRapidResponseAgentStream(question, {
         signal: controller.signal,
@@ -332,14 +335,15 @@ export default function App() {
         history: historyForApi,
         model: llmModel,
         activeAoiId: selectedAoiId || undefined,
-        onStatus: () => {
-          // Keep a single branded bubble; tokens replace the waiting state.
+        onStatus: (event) => {
+          activity = applyActivityStatus(activity, event);
           setSessions((prev) =>
             upsertSessionMessage(prev, sessionId, {
               id: assistantId,
               role: "assistant",
               content: streamed,
               meta: "RapidResponseAgent",
+              activity: [...activity],
             }),
           );
         },
@@ -351,38 +355,45 @@ export default function App() {
               role: "assistant",
               content: streamed,
               meta: "RapidResponseAgent",
+              activity: [...activity],
             }),
           );
         },
       });
+      activity = finalizeActivity(activity);
       setSessions((prev) =>
         upsertSessionMessage(prev, sessionId, {
           id: assistantId,
           role: "assistant",
           content: formatAnswer(response) || streamed,
           meta: intentMeta(response) || "RapidResponseAgent",
+          activity: activity.length ? activity : undefined,
         }),
       );
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
+        activity = finalizeActivity(activity);
         setSessions((prev) =>
           upsertSessionMessage(prev, sessionId, {
             id: assistantId,
             role: "assistant",
             content: streamed.trim() ? `${streamed}\n\n_Generation stopped._` : "Generation stopped.",
             meta: "cancelled",
+            activity: activity.length ? activity : undefined,
           }),
         );
         return;
       }
       const message = err instanceof Error ? err.message : "Request failed";
       setError(message);
+      activity = finalizeActivity(activity);
       setSessions((prev) =>
         upsertSessionMessage(prev, sessionId, {
           id: assistantId,
           role: "assistant",
           content: streamed.trim() ? `${streamed}\n\n**Error:** ${message}` : message,
           meta: "Error",
+          activity: activity.length ? activity : undefined,
         }),
       );
     } finally {
@@ -455,6 +466,7 @@ export default function App() {
     post: File;
     pre: File | null;
     autoMatchPre: boolean;
+    lookupFacilities: boolean;
     message: string;
   }) {
     const sessionId = activeSessionId;
@@ -485,6 +497,7 @@ export default function App() {
         post: input.post,
         pre: input.pre,
         autoMatchPre: input.autoMatchPre,
+        lookupFacilities: input.lookupFacilities,
         sessionId,
         message: input.message,
       });

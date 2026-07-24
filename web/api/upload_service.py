@@ -55,11 +55,14 @@ async def submit_assessment_upload(
     post: UploadFile,
     pre: UploadFile | None,
     auto_match_pre: bool,
+    lookup_facilities: bool = False,
     session_id: str | None = None,
     message: str | None = None,
 ) -> dict[str, Any]:
     if pre is None and not auto_match_pre:
         raise ValueError("Upload a pre GeoTIFF or enable automatic pre matching.")
+
+    skip_facilities = not bool(lookup_facilities)
 
     if session_id:
         from geoagent.runtime.memory import SessionStore
@@ -70,7 +73,12 @@ async def submit_assessment_upload(
             store.append_message(session_id, role="user", content=message.strip())
 
     aoi_id = new_upload_aoi_id()
-    job = create_job(aoi_id=aoi_id, auto_match_pre=auto_match_pre, session_id=session_id)
+    job = create_job(
+        aoi_id=aoi_id,
+        auto_match_pre=auto_match_pre,
+        skip_facilities=skip_facilities,
+        session_id=session_id,
+    )
     job_id = str(job["job_id"])
     apply_progress_event(job_id, {"type": "step_start", "step": "upload", "message": "Receiving upload…"})
     apply_progress_event(job_id, {"type": "step_done", "step": "upload", "message": "Upload received"})
@@ -92,6 +100,7 @@ async def submit_assessment_upload(
             "post_filename": post.filename,
             "pre_filename": pre.filename if pre else None,
             "auto_match_pre": auto_match_pre,
+            "lookup_facilities": not skip_facilities,
         },
     )
     apply_progress_event(
@@ -139,7 +148,13 @@ async def submit_assessment_upload(
     if pre_path and pre_path.is_file():
         shutil.copy2(pre_path, archive / "pre.tif")
 
-    start_pipeline_job(job_id, aligned_dir, aoi_id, session_id=session_id)
+    start_pipeline_job(
+        job_id,
+        aligned_dir,
+        aoi_id,
+        session_id=session_id,
+        skip_facilities=skip_facilities,
+    )
     return get_job_payload(job_id)
 
 
@@ -158,6 +173,7 @@ def get_job_payload(job_id: str) -> dict[str, Any]:
         "vlm_limit": job.get("vlm_limit"),
         "vlm_damaged_only": job.get("vlm_damaged_only"),
         "auto_match_pre": job.get("auto_match_pre"),
+        "skip_facilities": job.get("skip_facilities"),
         "pre_match": job.get("pre_match"),
         "valid_pair_coverage": job.get("valid_pair_coverage"),
         "completed_steps": job.get("completed_steps") or [],

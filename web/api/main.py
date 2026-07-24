@@ -215,6 +215,10 @@ async def api_assessment_upload(
     post: UploadFile = File(..., description="Post-disaster GeoTIFF"),
     pre: UploadFile | None = File(None, description="Pre-disaster GeoTIFF (optional if auto_match_pre)"),
     auto_match_pre: bool = Form(False),
+    lookup_facilities: bool = Form(
+        False,
+        description="If true, run nearest-hospital lookup during the assessment pipeline",
+    ),
     session_id: str | None = Form(None),
     message: str | None = Form(None),
 ) -> AssessmentJobResponse:
@@ -228,6 +232,7 @@ async def api_assessment_upload(
             post=post,
             pre=pre,
             auto_match_pre=auto_match_pre,
+            lookup_facilities=lookup_facilities,
             session_id=session_id,
             message=message,
         )
