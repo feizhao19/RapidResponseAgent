@@ -198,6 +198,7 @@ export type ActivityItem = {
   label: string;
   tool?: string;
   detail?: string;
+  step?: string;
   status: "running" | "done";
 };
 
@@ -206,6 +207,7 @@ export type ActivityStatusEvent = {
   label?: string;
   tool?: string;
   detail?: string;
+  step?: string;
   status?: "running" | "done";
   /** Legacy single-string status from older servers. */
   message?: string;
@@ -438,6 +440,7 @@ export async function askRapidResponseAgentStream(
         phase?: ActivityStatusEvent["phase"];
         label?: string;
         tool?: string;
+        step?: string;
         status?: ActivityStatusEvent["status"];
         response?: AskResponse;
         detail?: string;
@@ -453,6 +456,7 @@ export async function askRapidResponseAgentStream(
           label: event.label,
           tool: event.tool,
           detail: event.detail,
+          step: event.step,
           status: event.status,
           message: event.message,
         });

@@ -10,14 +10,29 @@ from geoagent.runtime.tools import ToolResult
 
 
 def test_activity_status_labels():
-    from geoagent.runtime.activity_status import make_status, tool_label, tool_phase
+    from geoagent.runtime.activity_status import (
+        emit_tool_request,
+        emit_tool_waiting,
+        make_status,
+        tool_label,
+        tool_phase,
+    )
 
     assert "damage" in tool_label("get_damage_stats").casefold()
     assert tool_phase("query_guidance") == "rag"
     assert tool_phase("get_damage_stats") == "tool"
-    event = make_status(phase="answering", label="Writing answer…")
+    event = make_status(phase="answering", label="Generating answer…", step="generate")
     assert event["type"] == "status"
     assert event["phase"] == "answering"
+    assert event["step"] == "generate"
+
+    events: list[dict] = []
+    emit_tool_request(events.append, "find_nearest_facilities")
+    emit_tool_waiting(events.append, "find_nearest_facilities")
+    assert events[0]["step"] == "request"
+    assert "request" in events[0]["label"].casefold()
+    assert events[1]["step"] == "await_response"
+    assert "waiting" in events[1]["label"].casefold()
 
 
 def test_clarify_emits_routing_then_answering():

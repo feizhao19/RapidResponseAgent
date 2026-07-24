@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { AoiRecord, ChatMessage, LlmModelId } from "../api/client";
 import { LLM_MODEL_OPTIONS } from "../api/client";
 import { buildDefaultAnalysisPrompt } from "../assessmentPrompt";
@@ -365,6 +366,7 @@ export function ChatPanel({
                   )}
                   <div className="chat-md">
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
                         a: ({ href, children }) => {
                           const facilityLink = parseHospitalMapDeepLink(href);

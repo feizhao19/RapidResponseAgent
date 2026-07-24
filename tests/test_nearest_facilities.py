@@ -44,6 +44,22 @@ class NearestFacilitiesTests(unittest.TestCase):
         self.assertEqual(route.l2, "hospitals")
         self.assertEqual(route.tools(), ["find_nearest_hospitals"])
 
+    def test_generic_facilities_not_hospitals(self) -> None:
+        for q in (
+            "any available facilities do we have?",
+            "Yes, nearby facilities",
+            "nearby facilities",
+        ):
+            with self.subTest(q=q):
+                route = route_message(q)
+                self.assertEqual(route.l2, "facilities", q)
+                self.assertEqual(route.tools(), ["find_nearest_facilities"])
+                self.assertEqual(route.slots.get("facility_kind"), "all")
+
+    def test_nearby_alone_does_not_force_hospitals(self) -> None:
+        route = route_message("anything nearby?")
+        self.assertNotEqual(route.l2, "hospitals")
+
     @patch(
         "geoagent.tools.nearest_facilities.fetch_facilities_overpass",
         return_value=[
@@ -102,6 +118,39 @@ class NearestFacilitiesTests(unittest.TestCase):
         )
         self.assertEqual(payload["hospital_count"], 1)
         self.assertEqual(payload["nearest"]["name"], "Saint John's Hospital")
+
+    def test_format_all_kinds_lists_multiple(self) -> None:
+        from geoagent.runtime.tools import _format_facilities_markdown, _requested_facility_count
+
+        self.assertEqual(_requested_facility_count("give me three options for each"), 3)
+        payload = {
+            "facility_kind": "all",
+            "by_kind": {
+                "hospital": {
+                    "status": "ok",
+                    "hospitals": [
+                        {"name": "H1", "distance_mi": 1.0, "coordinates_wgs84": [-118.2, 34.0]},
+                        {"name": "H2", "distance_mi": 2.0, "coordinates_wgs84": [-118.3, 34.1]},
+                        {"name": "H3", "distance_mi": 3.0, "coordinates_wgs84": [-118.4, 34.2]},
+                    ],
+                },
+                "fire_station": {
+                    "status": "ok",
+                    "facilities": [
+                        {"name": "F1", "distance_mi": 0.2, "coordinates_wgs84": [-118.2, 34.0]},
+                    ],
+                },
+                "police": {"status": "ok", "facilities": []},
+                "shelter": {"status": "ok", "facilities": []},
+            },
+            "disclaimer": "OSM disclaimer",
+        }
+        md = _format_facilities_markdown("demo", payload, limit=3)
+        self.assertIn("1. [H1]", md)
+        self.assertIn("2. [H2]", md)
+        self.assertIn("3. [H3]", md)
+        self.assertIn("Only 1 fire stations found", md)
+        self.assertNotIn("[No other", md)
 
 
 if __name__ == "__main__":
