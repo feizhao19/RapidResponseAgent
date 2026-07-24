@@ -7,9 +7,14 @@ type Props = {
 };
 
 function summarize(items: ActivityItem[]): string {
-  const tools = items.filter((item) => item.tool);
-  if (tools.length > 0) {
-    return `Used ${tools.length} tool${tools.length === 1 ? "" : "s"}`;
+  const toolIds = new Set(
+    items.filter((item) => item.tool && item.step === "run").map((item) => item.tool),
+  );
+  if (toolIds.size === 0) {
+    items.filter((item) => item.tool).forEach((item) => toolIds.add(item.tool));
+  }
+  if (toolIds.size > 0) {
+    return `Used ${toolIds.size} tool${toolIds.size === 1 ? "" : "s"}`;
   }
   if (items.some((item) => item.phase === "answering")) {
     return "Answered";
@@ -51,7 +56,7 @@ export function ActivityTimeline({ items, live = false }: Props) {
               key={item.id}
               className={`activity-timeline-item status-${item.status}${
                 item.status === "running" && running ? " is-pulse" : ""
-              }`}
+              }${item.step && item.step !== "run" && item.step !== "generate" ? " is-substep" : ""}`}
             >
               <span className="activity-timeline-marker" aria-hidden="true">
                 {item.status === "done" ? "✓" : "·"}

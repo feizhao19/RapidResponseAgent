@@ -1,6 +1,14 @@
 import type { ActivityItem, ActivityStatusEvent } from "./api/client";
 
-/** Merge a live SSE status event into the activity list (keyed by tool or phase). */
+function activityKey(event: ActivityStatusEvent): string {
+  const phase = event.phase || "routing";
+  if (event.tool && event.step) return `${event.tool}:${event.step}`;
+  if (event.tool) return `tool:${event.tool}`;
+  if (event.step) return `${phase}:${event.step}`;
+  return phase;
+}
+
+/** Merge a live SSE status event into the activity list. */
 export function applyActivityStatus(
   items: ActivityItem[],
   event: ActivityStatusEvent,
@@ -9,7 +17,7 @@ export function applyActivityStatus(
   if (!label) return items;
 
   const phase = event.phase || "routing";
-  const key = event.tool || phase;
+  const key = activityKey(event);
   const status = event.status ?? "running";
   const nextItem: ActivityItem = {
     id: key,
@@ -17,6 +25,7 @@ export function applyActivityStatus(
     label,
     tool: event.tool,
     detail: event.detail,
+    step: event.step,
     status,
   };
 
@@ -29,9 +38,12 @@ export function applyActivityStatus(
   }
 
   if (status === "running") {
-    next = next.map((item) =>
-      item.id === key || item.status === "done" ? item : { ...item, status: "done" },
-    );
+    // Keep parent tool rows running while their sub-steps (request/wait) progress.
+    next = next.map((item) => {
+      if (item.id === key || item.status === "done") return item;
+      if (key.startsWith(`${item.id}:`)) return item;
+      return { ...item, status: "done" };
+    });
   }
   return next;
 }
