@@ -5,3 +5,7 @@ The agent orchestration package (LangGraph AOI pipeline, runtime, skills, and to
 This public release keeps a placeholder only. To obtain `geoagent/` for permitted research, evaluation, education, or nonprofit/disaster-response use, please contact the author:
 
 **Fei Zhao** — [zhaof.thu@gmail.com](mailto:zhaof.thu@gmail.com) · [github.com/feizhao19](https://github.com/feizhao19)
+
+## Public SOP corpus
+
+Curated public emergency-guidance markdown lives under [`knowledge/sops/`](../knowledge/sops/) (FEMA / Cal OES / Ready.gov / NWS summaries). With the private `geoagent` package, rebuild the local Chroma index via `scripts/build_knowledge_rag_index.py`.

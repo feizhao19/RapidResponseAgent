@@ -439,7 +439,7 @@ def run_ask(
         "use_llm": use_llm,
         "use_llm_router": use_llm,
         "retrieve_only": retrieve_only,
-        "default_to_historical": True,
+        "default_to_historical": False,
         "assessment_index": str(DEFAULT_INDEX_PATH),
     }
     if model:

@@ -24,7 +24,7 @@ class IntentRouterRuleTests(unittest.TestCase):
         self.assertEqual(result.intent, "historical_assessment")
         self.assertEqual(result.slots.get("city"), "Topanga")
 
-    def test_chat_default_routes_open_questions_to_historical(self) -> None:
+    def test_explicit_damage_still_historical(self) -> None:
         result = classify_intent("help me with damage", use_llm=False)
         self.assertEqual(result.intent, "historical_assessment")
 
@@ -51,7 +51,7 @@ class IntentRouterRuleTests(unittest.TestCase):
         self.assertEqual(result.intent, "weather_context")
         self.assertEqual(result.slots.get("city"), "Topanga")
 
-    def test_ambiguous_without_default_becomes_clarify(self) -> None:
+    def test_ambiguous_hello_clarifies(self) -> None:
         result = classify_intent("hello", use_llm=False, default_to_historical=False)
         self.assertEqual(result.intent, "clarify")
 
@@ -66,7 +66,14 @@ class IntentRouterRuleTests(unittest.TestCase):
             {"role": "user", "content": "Topanga 2025 wildfire damaged count"},
             {"role": "assistant", "content": "The damaged count was 85."},
         ]
-        self.assertTrue(is_historical_qa_session([ChatTurn("user", history[0]["content"]), ChatTurn("assistant", history[1]["content"])]))
+        self.assertTrue(
+            is_historical_qa_session(
+                [
+                    ChatTurn("user", history[0]["content"]),
+                    ChatTurn("assistant", history[1]["content"]),
+                ]
+            )
+        )
         result = classify_intent("Analyze quad 031311102212", use_llm=False, chat_history=history)
         self.assertEqual(result.intent, "clarify")
         self.assertEqual(result.method, "session_guard")
@@ -77,20 +84,20 @@ class IntentRouterRuleTests(unittest.TestCase):
         self.assertEqual(result.intent, "new_assessment")
 
     def test_capability_followup_clarifies_without_rag(self) -> None:
-        result = classify_intent("can I ask more questions ?", use_llm=True, default_to_historical=True)
+        result = classify_intent("can I ask more questions ?", use_llm=True)
         self.assertEqual(result.intent, "clarify")
         self.assertEqual(result.method, "rule")
         self.assertIn("keep asking", (result.clarification or "").lower())
 
-    def test_help_with_damage_still_historical(self) -> None:
-        result = classify_intent("help me with damage", use_llm=False, default_to_historical=True)
-        self.assertEqual(result.intent, "historical_assessment")
-
-    def test_chat_default_skips_intent_llm_path(self) -> None:
-        # Open question should default to historical without needing LLM routing.
-        result = classify_intent("tell me something useful", use_llm=True, default_to_historical=True)
-        self.assertEqual(result.intent, "historical_assessment")
+    def test_ambiguous_open_question_clarifies_instead_of_historical(self) -> None:
+        result = classify_intent("tell me something useful", use_llm=True)
+        self.assertEqual(result.intent, "clarify")
         self.assertEqual(result.method, "rule")
+        self.assertIn("not sure which answer", (result.clarification or "").lower())
+
+    def test_legacy_default_to_historical_still_available(self) -> None:
+        result = classify_intent("tell me something useful", use_llm=False, default_to_historical=True)
+        self.assertEqual(result.intent, "historical_assessment")
 
 
 if __name__ == "__main__":
