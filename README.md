@@ -2,13 +2,22 @@
 
 **Multimodal AI Agent for Post-Disaster Assessment**
 
-RapidResponseAgent is an agentic runtime that transforms raw remote-sensing imagery into actionable disaster intelligence. Rather than treating perception and reasoning as independent stages, it combines vision models, verification agents, geospatial analytics, and language models into a unified workflow for emergency response.
+When a wildfire or other disaster moves through a city, emergency teams do not need another model demo. They need a clear picture of what burned, where people and crews should go next, and answers they can trust—without waiting for a full perception rerun every time someone asks a follow-up.
 
-The pipeline begins with **ViPDE**, which performs large-scale building damage assessment from paired pre- and post-disaster imagery. Instead of accepting every prediction as final, a **Vision-Language Agent** (Visual Verifier) reviews uncertain or inconsistent cases, verifies discrepancies using multimodal reasoning, and refines assessment results before they become reusable disaster assessment artifacts.
+**RapidResponseAgent** is built for that loop. It turns paired pre/post remote-sensing imagery into durable assessment artifacts, then keeps a grounded conversation on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, weather context, short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
 
-Reviewers can **Agree** or **Reject** each Verifier recommendation in the UI. The system records preferences against ensemble views and a forced counterfactual hypothesis, then exports them as DPO pairs to optionally fine-tune a LoRA adapter that steers subsequent VLM review.
+### From pixels to a decision surface
 
-These verified artifacts are then consumed by downstream reasoning agents, enabling low-latency multi-turn question answering, infrastructure analysis, and report generation without rerunning expensive visual inference.
+The story of a session is deliberate:
+
+1. **See** — **ViPDE** scores building damage at scale from pre/post imagery and fuses predictions with official footprints.
+2. **Verify** — a **Vision-Language Agent** (Visual Verifier) challenges uncertain or inconsistent cases with multimodal chips; reviewers can **Agree** or **Reject**, and those preferences can later steer the Verifier via DPO / LoRA.
+3. **Hold still** — verified results become reusable artifacts (stats, maps, facilities, manifests). Expensive GPU work stays behind a checkpoint.
+4. **Ask** — downstream tools and local LLMs answer multi-turn questions over that frozen evidence. Numbers come from assessment tools; doctrine comes from cited public SOPs; vague prompts get a clarify menu instead of a confident wrong answer.
+
+Perception and reasoning are not two disconnected apps. They are one workflow: heavy vision once, light reasoning many times—while sensitive imagery stays **on-premises**.
+
+Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment)** — licensing and citation follow that project ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)).
 
 ### Demo
 
@@ -47,45 +56,38 @@ Watch the walkthrough: **[YouTube — RapidResponseAgent demo](https://www.youtu
   </tr>
 </table>
 
-Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment)** — licensing and citation follow that project ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)).
+Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases (e.g. Altadena / Topanga-area quads such as `maxar_031311103033`).
 
 ---
 
 ## Architecture
 
-RapidResponseAgent follows an **artifact-centric orchestration** architecture for heterogeneous geospatial AI workloads.
+RapidResponseAgent is **artifact-centric**: perception writes durable AOI outputs; chat never invents those outputs from memory.
 
-The runtime coordinates:
+```text
+Imagery (pre/post)
+    → ViPDE + footprint fusion
+    → Visual Verifier (+ optional human Agree/Reject → DPO)
+    → Assessment artifacts (stats · map · facilities · report)
+    → Tool-routed chat
+         ├─ Case tools   (counts, 3×3 priority, hospitals/fire/police/shelters, weather)
+         ├─ Case RAG     (this AOI’s indexed artifacts)
+         └─ Knowledge RAG (public FEMA / Cal OES / Ready.gov SOPs, with Sources)
+```
 
-- **ViPDE** for large-scale building damage assessment
-- **VLM verification agents** for discrepancy detection and multimodal reasoning
-- **Human preference feedback** (Agree / Reject) → DPO pairs → optional LoRA Visual Verifier adapter
-- Structured damage analytics (including a **3×3 directional impact grid** for prioritization)
-- Geospatial **critical-facility** lookup (hospitals, fire stations, police, shelters via OSM)
-- **Case RAG** over cached assessment artifacts + **Knowledge RAG** over public emergency SOPs
-- Rules-first **tool routing** with forced tools for ops questions and clarify-on-ambiguity (no guessing case stats)
-- Persistent session memory, tool traces, and manifest-driven checkpoints for reproducible multi-step analysis
-
-By separating GPU-intensive perception from lightweight reasoning, the system supports efficient iterative analysis while keeping sensitive disaster imagery entirely **on-premises**.
-
-We will **gradually release** more of this work over time (including withheld pipeline components and packaging where licensing allows).
+GPU-heavy steps run in the assessment job; the chat path is rules-first tool routing plus local LLMs for wording. Ambiguous questions clarify. We will **gradually release** more of this stack as licensing allows.
 
 ---
 
 ## What it does
 
-| Capability | Description |
-|------------|-------------|
-| **Damage assessment** | Align pre/post imagery → run **ViPDE** pixel damage perception → fuse with official building footprints (**Overture** by default; LARIAC optional) |
-| **VLM review** | Llama Vision double-checks footprint mismatches and predicted damage with pre/post chips (ensemble views) |
-| **Visual Verifier feedback** | Agree / Reject each recommendation; stores preference pools + counterfactuals for DPO fine-tuning |
-| **Map + panels** | Leaflet map with imagery overlays, damage polygons, hospitals, region stats, and assessment report; chat deep-links fly to hospitals / fire / police / shelters |
-| **Grounded chat (tools)** | Multi-turn Q&A on the active AOI via registered tools: damage stats + **which area first** (3×3 grid), hospitals, **fire / police / shelters**, weather, short report |
-| **Knowledge guidance** | Public SOP RAG (FEMA / Cal OES / Ready.gov / NWS summaries under `knowledge/sops/`) with required source citations |
-| **Reliable routing** | Ops numbers must come from assessment tools; ambiguous asks **clarify** instead of inventing case RAG answers |
-| **New assessments** | Upload post (and optional pre) GeoTIFF, or auto-match pre (**Maxar Open → local Maxar → NAIP → USGS ImageServer → USGS EarthExplorer/NAIP+ → NOAA Digital Coast**) and run the full pipeline |
-
-Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases (e.g. Altadena / Topanga-area quads such as `maxar_031311103033`).
+| Stage | What you get |
+|-------|----------------|
+| **Assess** | Align imagery → ViPDE damage perception → fuse with **Overture** footprints (LARIAC optional); upload GeoTIFF or auto-match pre (Maxar → NAIP → USGS → NOAA, …) |
+| **Verify** | Llama Vision review of mismatches / damage; Agree–Reject preferences for optional DPO LoRA |
+| **Orient** | Map with pre/post overlays, damage polygons, region stats; chat deep-links to hospitals and fire / police / shelters |
+| **Decide** | Tool-grounded Q&A: damage counts, which area first (3×3 impact grid), critical facilities, weather, short report |
+| **Advise** | Knowledge guidance from curated public SOPs under `knowledge/sops/` (citations required; not a substitute for official orders) |
 
 ---
 
@@ -192,7 +194,7 @@ Ambiguous asks (e.g. “tell me something useful”) prompt a **clarify** menu i
 
 ## Chat tools & knowledge RAG
 
-Registered chat tools (rules-first router; LLM rewrites only, does not invent coordinates or counts):
+After assessment artifacts exist, chat is a **tool loop**, not an open-ended essay generator. The router picks a tool; the LLM only phrases the result.
 
 | Tool | Example asks |
 |------|----------------|
