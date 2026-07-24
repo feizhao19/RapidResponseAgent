@@ -353,14 +353,18 @@ export function ChatPanel({
                   <ReactMarkdown
                     components={{
                       a: ({ href, children }) => {
-                        const hospitalLink = parseHospitalMapDeepLink(href);
-                        if (hospitalLink && onHospitalMapLink) {
+                        const facilityLink = parseHospitalMapDeepLink(href);
+                        if (facilityLink && onHospitalMapLink) {
                           return (
                             <button
                               type="button"
                               className="chat-map-link"
                               title="Show on map"
-                              onClick={() => onHospitalMapLink(hospitalLink)}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onHospitalMapLink(facilityLink);
+                              }}
                             >
                               {children}
                             </button>
