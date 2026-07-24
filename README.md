@@ -4,13 +4,13 @@
 
 When a wildfire or other disaster moves through a city, emergency teams do not need another model demo. They need a clear picture of what burned, where people and crews should go next, and answers they can trust—without waiting for a full perception rerun every time someone asks a follow-up.
 
-**RapidResponseAgent** is built for that loop. It turns paired pre/post remote-sensing imagery into durable assessment artifacts, then keeps a grounded conversation on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, weather context, short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
+**RapidResponseAgent** is built for that loop. Start from a **post-disaster** scene—pre-event imagery is optional. The system can automatically find a matching pre-disaster source, align the pair, and turn the result into durable assessment artifacts. A grounded conversation then sits on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, weather context, short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
 
 ### From pixels to a decision surface
 
 The story of a session is deliberate:
 
-1. **See** — **ViPDE** scores building damage at scale from pre/post imagery and fuses predictions with official footprints.
+1. **See** — Upload or select a **post-disaster** GeoTIFF. Pre-event imagery is **not required**: the agent can search for an appropriate pre scene (Maxar Open → local Maxar → NAIP → USGS → NOAA, …), align it to the post image, run **ViPDE** damage scoring at scale, and fuse predictions with official footprints.
 2. **Verify** — a **Vision-Language Agent** (Visual Verifier) challenges uncertain or inconsistent cases with multimodal chips; reviewers can **Agree** or **Reject**, and those preferences can later steer the Verifier via DPO / LoRA.
 3. **Hold still** — verified results become reusable artifacts (stats, maps, facilities, manifests). Expensive GPU work stays behind a checkpoint.
 4. **Ask** — downstream tools and local LLMs answer multi-turn questions over that frozen evidence. Numbers come from assessment tools; doctrine comes from cited public SOPs; vague prompts get a clarify menu instead of a confident wrong answer.
@@ -65,7 +65,8 @@ Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases 
 RapidResponseAgent is **artifact-centric**: perception writes durable AOI outputs; chat never invents those outputs from memory.
 
 ```text
-Imagery (pre/post)
+Post imagery (+ optional pre)
+    → Auto pre-match & align (if needed)
     → ViPDE + footprint fusion
     → Visual Verifier (+ optional human Agree/Reject → DPO)
     → Assessment artifacts (stats · map · facilities · report)
@@ -83,7 +84,7 @@ GPU-heavy steps run in the assessment job; the chat path is rules-first tool rou
 
 | Stage | What you get |
 |-------|----------------|
-| **Assess** | Align imagery → ViPDE damage perception → fuse with **Overture** footprints (LARIAC optional); upload GeoTIFF or auto-match pre (Maxar → NAIP → USGS → NOAA, …) |
+| **Assess** | Start from **post** GeoTIFF (pre optional): auto-find & align pre when missing → ViPDE damage perception → fuse with **Overture** footprints (LARIAC optional) |
 | **Verify** | Llama Vision review of mismatches / damage; Agree–Reject preferences for optional DPO LoRA |
 | **Orient** | Map with pre/post overlays, damage polygons, region stats; chat deep-links to hospitals and fire / police / shelters |
 | **Decide** | Tool-grounded Q&A: damage counts, which area first (3×3 impact grid), critical facilities, weather, short report |
