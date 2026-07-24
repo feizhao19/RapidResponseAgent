@@ -4,6 +4,16 @@ Pipeline and agent CLI scripts (`align_pre_post.py`, VLM arbitration helpers, HF
 
 The web UI and `perception` docs/configs are the supported public surface. The `geoagent/` package and full offline pipelines are **available by request** from the author (see the root README License contact).
 
+## Public SOP knowledge corpus
+
+Markdown under `knowledge/sops/` is public. Index build / chat guidance tooling ships with the private `geoagent` package:
+
+```bash
+# After obtaining geoagent/ + scripts/
+pip install -r requirements.txt   # includes chromadb
+PYTHONPATH=. python scripts/build_knowledge_rag_index.py
+```
+
 ## VLM preference → DPO (Visual Verifier)
 
 After collecting **Agree / Reject** feedback in **VLM Building Review**:
