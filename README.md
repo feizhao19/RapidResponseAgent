@@ -4,7 +4,7 @@
 
 When a wildfire or other disaster moves through a city, emergency teams do not need another model demo. They need a clear picture of what burned, where people and crews should go next, and answers they can trust—without waiting for a full perception rerun every time someone asks a follow-up.
 
-**RapidResponseAgent** is built for that loop. Start from a **post-disaster** scene—pre-event imagery is optional. The system can automatically find a matching pre-disaster source, align the pair, and turn the result into durable assessment artifacts. A grounded conversation then sits on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, weather context, short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
+**RapidResponseAgent** is designed around that workflow. Given a post-disaster scene, the system automatically retrieves matching pre-disaster imagery, aligns the image pair, and generates durable assessment artifacts. A grounded conversation then sits on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, weather context, short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
 
 ### From pixels to a decision surface
 
