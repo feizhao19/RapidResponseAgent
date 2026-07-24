@@ -31,6 +31,7 @@ class PipelineWorkItem:
     vlm_mode: VlmReviewMode = "both"
     vlm_limit: int = 2
     vlm_damaged_only: bool = True
+    skip_facilities: bool = True
 
 
 def _ensure_worker() -> None:
@@ -72,6 +73,7 @@ def enqueue_pipeline_job(
     vlm_mode: VlmReviewMode = "both",
     vlm_limit: int = 2,
     vlm_damaged_only: bool = True,
+    skip_facilities: bool = True,
 ) -> int:
     """Queue a GPU job. Returns 1-based queue position."""
     from web.api.jobs import update_job
@@ -98,6 +100,7 @@ def enqueue_pipeline_job(
         vlm_mode=vlm_mode if kind == "vlm_review" else None,
         vlm_limit=vlm_limit if kind == "vlm_review" else None,
         vlm_damaged_only=vlm_damaged_only if kind == "vlm_review" else None,
+        skip_facilities=skip_facilities if kind == "pipeline" else None,
     )
     _work_queue.put(
         PipelineWorkItem(
@@ -109,6 +112,7 @@ def enqueue_pipeline_job(
             vlm_mode=vlm_mode,
             vlm_limit=vlm_limit,
             vlm_damaged_only=vlm_damaged_only,
+            skip_facilities=skip_facilities,
         )
     )
     return position

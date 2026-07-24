@@ -190,11 +190,33 @@ export type ServerSession = {
   messages: ChatMessage[];
 };
 
+export type ActivityPhase = "routing" | "tool" | "rag" | "answering" | "done";
+
+export type ActivityItem = {
+  id: string;
+  phase: ActivityPhase;
+  label: string;
+  tool?: string;
+  detail?: string;
+  status: "running" | "done";
+};
+
+export type ActivityStatusEvent = {
+  phase?: ActivityPhase;
+  label?: string;
+  tool?: string;
+  detail?: string;
+  status?: "running" | "done";
+  /** Legacy single-string status from older servers. */
+  message?: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   meta?: string;
+  activity?: ActivityItem[];
 };
 
 export type AssessmentJob = {
@@ -208,6 +230,7 @@ export type AssessmentJob = {
   vlm_limit?: number;
   vlm_damaged_only?: boolean;
   auto_match_pre?: boolean;
+  skip_facilities?: boolean;
   pre_match?: {
     quad?: string;
     date?: string;
@@ -336,7 +359,7 @@ export async function askRapidResponseAgent(
 }
 
 export type AskStreamHandlers = {
-  onStatus?: (message: string) => void;
+  onStatus?: (event: ActivityStatusEvent) => void;
   onToken?: (text: string) => void;
   onDone?: (response: AskResponse) => void;
   onError?: (detail: string) => void;
@@ -408,14 +431,31 @@ export async function askRapidResponseAgentStream(
       if (!line) continue;
       const raw = line.slice(5).trimStart();
       if (!raw) continue;
-      let event: { type?: string; text?: string; message?: string; response?: AskResponse; detail?: string };
+      let event: {
+        type?: string;
+        text?: string;
+        message?: string;
+        phase?: ActivityStatusEvent["phase"];
+        label?: string;
+        tool?: string;
+        status?: ActivityStatusEvent["status"];
+        response?: AskResponse;
+        detail?: string;
+      };
       try {
         event = JSON.parse(raw) as typeof event;
       } catch {
         continue;
       }
-      if (event.type === "status" && event.message) {
-        options.onStatus?.(event.message);
+      if (event.type === "status" && (event.label || event.message || event.phase)) {
+        options.onStatus?.({
+          phase: event.phase,
+          label: event.label,
+          tool: event.tool,
+          detail: event.detail,
+          status: event.status,
+          message: event.message,
+        });
       } else if (event.type === "token" && typeof event.text === "string") {
         options.onToken?.(event.text);
       } else if (event.type === "done" && event.response) {
@@ -449,6 +489,7 @@ export async function uploadAssessment(input: {
   post: File;
   pre?: File | null;
   autoMatchPre: boolean;
+  lookupFacilities?: boolean;
   sessionId?: string;
   message?: string;
 }): Promise<AssessmentJob> {
@@ -458,6 +499,7 @@ export async function uploadAssessment(input: {
     form.append("pre", input.pre);
   }
   form.append("auto_match_pre", String(input.autoMatchPre));
+  form.append("lookup_facilities", String(Boolean(input.lookupFacilities)));
   if (input.sessionId) {
     form.append("session_id", input.sessionId);
   }

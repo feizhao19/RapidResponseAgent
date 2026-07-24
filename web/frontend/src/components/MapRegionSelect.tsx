@@ -43,6 +43,7 @@ export function MapRegionSelect({ enabled, buildingsGeojson, onSelection }: Prop
     }
 
     container.classList.add("map-region-select-cursor");
+    map.closePopup();
     const boxZoomWasEnabled = map.boxZoom.enabled();
     const doubleClickWasEnabled = map.doubleClickZoom.enabled();
     map.boxZoom.disable();

@@ -797,6 +797,78 @@ select {
   text-transform: uppercase;
 }
 
+.activity-timeline {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.activity-timeline-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.activity-timeline-summary:hover {
+  color: var(--text-primary);
+}
+
+.activity-timeline-chevron {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.activity-timeline-list {
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.activity-timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.activity-timeline-marker {
+  width: 0.85rem;
+  flex: 0 0 auto;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.activity-timeline-item.status-running .activity-timeline-marker {
+  opacity: 1;
+}
+
+.activity-timeline-item.is-pulse .activity-timeline-label {
+  animation: activity-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes activity-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.activity-timeline-label {
+  min-width: 0;
+}
+
 /* LLM / markdown replies in chat */
 .chat-md {
   font-size: inherit;

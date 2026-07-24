@@ -6,6 +6,7 @@ import { buildDefaultAnalysisPrompt } from "../assessmentPrompt";
 import type { ChatSession } from "../chatSessions";
 import { formatAssessedCaseLabel } from "../caseLabel";
 import { parseHospitalMapDeepLink, type HospitalMapDeepLink } from "../mapDeepLink";
+import { ActivityTimeline } from "./ActivityTimeline";
 
 const SIDEBAR_COLLAPSED_KEY = "geoagent.chat.sidebarCollapsed";
 
@@ -48,6 +49,7 @@ type Props = {
     post: File;
     pre: File | null;
     autoMatchPre: boolean;
+    lookupFacilities: boolean;
     message: string;
   }) => void;
   onHospitalMapLink?: (link: HospitalMapDeepLink) => void;
@@ -77,6 +79,7 @@ export function ChatPanel({
   const [postFile, setPostFile] = useState<File | null>(null);
   const [preFile, setPreFile] = useState<File | null>(null);
   const [autoMatchPre, setAutoMatchPre] = useState(true);
+  const [lookupFacilities, setLookupFacilities] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const [sidebarPeek, setSidebarPeek] = useState(false);
   const postInputId = useId();
@@ -147,6 +150,7 @@ export function ChatPanel({
     setPostFile(null);
     setPreFile(null);
     setAutoMatchPre(true);
+    setLookupFacilities(false);
     setDraft((current) => (current === previousAutoDraft ? "" : current));
   }
 
@@ -161,6 +165,7 @@ export function ChatPanel({
         post: postFile,
         pre: preFile,
         autoMatchPre: preFile ? false : autoMatchPre,
+        lookupFacilities,
         message,
       });
       clearAttachments();
@@ -340,52 +345,63 @@ export function ChatPanel({
               stats, hospitals, weather, or a short report.
             </div>
           )}
-          {messages.map((message) => (
+          {messages.map((message) => {
+            const isStreaming = message.meta === "RapidResponseAgent";
+            const hasActivity = Boolean(message.activity?.length);
+            const showThinking =
+              loading && isStreaming && !message.content && !hasActivity;
+            return (
             <div
               key={message.id}
               className={`message ${message.role} ${
                 message.meta === "Assessment" && uploadBusy ? "message-live" : ""
-              } ${message.meta === "RapidResponseAgent" ? "message-streaming" : ""}`}
+              } ${isStreaming ? "message-streaming" : ""}`}
             >
               {message.meta && <div className="message-meta">{message.meta}</div>}
               {message.role === "assistant" ? (
-                <div className="chat-md">
-                  <ReactMarkdown
-                    components={{
-                      a: ({ href, children }) => {
-                        const facilityLink = parseHospitalMapDeepLink(href);
-                        if (facilityLink && onHospitalMapLink) {
+                <>
+                  {hasActivity && (
+                    <ActivityTimeline items={message.activity!} live={isStreaming} />
+                  )}
+                  <div className="chat-md">
+                    <ReactMarkdown
+                      components={{
+                        a: ({ href, children }) => {
+                          const facilityLink = parseHospitalMapDeepLink(href);
+                          if (facilityLink && onHospitalMapLink) {
+                            return (
+                              <button
+                                type="button"
+                                className="chat-map-link"
+                                title="Show on map"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  onHospitalMapLink(facilityLink);
+                                }}
+                              >
+                                {children}
+                              </button>
+                            );
+                          }
                           return (
-                            <button
-                              type="button"
-                              className="chat-map-link"
-                              title="Show on map"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                onHospitalMapLink(facilityLink);
-                              }}
-                            >
+                            <a href={href} target="_blank" rel="noreferrer">
                               {children}
-                            </button>
+                            </a>
                           );
-                        }
-                        return (
-                          <a href={href} target="_blank" rel="noreferrer">
-                            {children}
-                          </a>
-                        );
-                      },
-                    }}
-                  >
-                    {message.content || (loading && message.meta === "RapidResponseAgent" ? "_Thinking…_" : "")}
-                  </ReactMarkdown>
-                </div>
+                        },
+                      }}
+                    >
+                      {message.content || (showThinking ? "_Thinking…_" : "")}
+                    </ReactMarkdown>
+                  </div>
+                </>
               ) : (
                 <div>{message.content}</div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="chat-composer" onClick={(event) => event.stopPropagation()}>
@@ -451,6 +467,15 @@ export function ChatPanel({
                 }}
               />
               Auto-match pre-disaster imagery
+            </label>
+            <label className="upload-auto-match">
+              <input
+                type="checkbox"
+                checked={lookupFacilities}
+                disabled={busy}
+                onChange={(event) => setLookupFacilities(event.target.checked)}
+              />
+              Look up nearby hospitals during assessment
             </label>
           </div>
 

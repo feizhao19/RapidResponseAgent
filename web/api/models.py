@@ -103,6 +103,7 @@ class AssessmentJobResponse(BaseModel):
     vlm_limit: int | None = None
     vlm_damaged_only: bool | None = None
     auto_match_pre: bool | None = None
+    skip_facilities: bool | None = None
     pre_match: dict[str, Any] | None = None
     valid_pair_coverage: float | None = None
     completed_steps: list[str] = Field(default_factory=list)
