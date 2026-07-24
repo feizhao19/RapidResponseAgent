@@ -261,6 +261,13 @@ const hospitalIcon = L.divIcon({
   iconAnchor: [6, 6],
 });
 
+const facilityFocusIcon = L.divIcon({
+  className: "",
+  html: '<div style="background:#2563eb;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 0 1px #1e40af"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
 export function MapPanel({
   aoiId,
   bounds,
@@ -493,6 +500,45 @@ export function MapPanel({
               </Marker>
             );
           })}
+          {focusMap?.kind === "hospital" &&
+            !hospitals.some((h) => hospitalRowKey(h) === focusMap.hospitalKey) && (
+              <Marker
+                key={`chat-focus-${focusMap.key}`}
+                position={[focusMap.coordinates_wgs84[1], focusMap.coordinates_wgs84[0]]}
+                icon={
+                  focusMap.facilityKind && focusMap.facilityKind !== "hospital"
+                    ? facilityFocusIcon
+                    : hospitalIcon
+                }
+                ref={(marker) => {
+                  if (marker) {
+                    markerRefs.current[focusMap.hospitalKey] = marker;
+                  } else {
+                    delete markerRefs.current[focusMap.hospitalKey];
+                  }
+                }}
+              >
+                <Popup minWidth={220} maxWidth={300}>
+                  <div className="hospital-popup">
+                    <div className="hospital-popup-title">{focusMap.name}</div>
+                    <dl className="hospital-popup-details">
+                      {focusMap.facilityKind && focusMap.facilityKind !== "hospital" && (
+                        <>
+                          <dt>Type</dt>
+                          <dd>{String(focusMap.facilityKind).replace(/_/g, " ")}</dd>
+                        </>
+                      )}
+                      {focusMap.distance_mi && (
+                        <>
+                          <dt>Distance</dt>
+                          <dd>{focusMap.distance_mi} mi from AOI centroid</dd>
+                        </>
+                      )}
+                    </dl>
+                  </div>
+                </Popup>
+              </Marker>
+            )}
         </MapContainer>
         {regionSelection && popoverAnchor && (
           <RegionStatsPopover

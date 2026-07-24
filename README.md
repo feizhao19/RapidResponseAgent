@@ -60,9 +60,10 @@ The runtime coordinates:
 - **ViPDE** for large-scale building damage assessment
 - **VLM verification agents** for discrepancy detection and multimodal reasoning
 - **Human preference feedback** (Agree / Reject) → DPO pairs → optional LoRA Visual Verifier adapter
-- Structured damage analytics
-- Geospatial facility lookup
-- **RAG + locally deployed LLMs** over cached assessment artifacts
+- Structured damage analytics (including a **3×3 directional impact grid** for prioritization)
+- Geospatial **critical-facility** lookup (hospitals, fire stations, police, shelters via OSM)
+- **Case RAG** over cached assessment artifacts + **Knowledge RAG** over public emergency SOPs
+- Rules-first **tool routing** with forced tools for ops questions and clarify-on-ambiguity (no guessing case stats)
 - Persistent session memory, tool traces, and manifest-driven checkpoints for reproducible multi-step analysis
 
 By separating GPU-intensive perception from lightweight reasoning, the system supports efficient iterative analysis while keeping sensitive disaster imagery entirely **on-premises**.
@@ -78,8 +79,10 @@ We will **gradually release** more of this work over time (including withheld pi
 | **Damage assessment** | Align pre/post imagery → run **ViPDE** pixel damage perception → fuse with official building footprints (**Overture** by default; LARIAC optional) |
 | **VLM review** | Llama Vision double-checks footprint mismatches and predicted damage with pre/post chips (ensemble views) |
 | **Visual Verifier feedback** | Agree / Reject each recommendation; stores preference pools + counterfactuals for DPO fine-tuning |
-| **Map + panels** | Leaflet map with imagery overlays, damage polygons, hospitals, region stats, and assessment report |
-| **Grounded chat** | Multi-turn Q&A scoped to the active AOI: damage stats, hospitals, weather, historical RAG, report generation |
+| **Map + panels** | Leaflet map with imagery overlays, damage polygons, hospitals, region stats, and assessment report; chat deep-links fly to hospitals / fire / police / shelters |
+| **Grounded chat (tools)** | Multi-turn Q&A on the active AOI via registered tools: damage stats + **which area first** (3×3 grid), hospitals, **fire / police / shelters**, weather, short report |
+| **Knowledge guidance** | Public SOP RAG (FEMA / Cal OES / Ready.gov / NWS summaries under `knowledge/sops/`) with required source citations |
+| **Reliable routing** | Ops numbers must come from assessment tools; ambiguous asks **clarify** instead of inventing case RAG answers |
 | **New assessments** | Upload post (and optional pre) GeoTIFF, or auto-match pre (**Maxar Open → local Maxar → NAIP → USGS ImageServer → USGS EarthExplorer/NAIP+ → NOAA Digital Coast**) and run the full pipeline |
 
 Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases (e.g. Altadena / Topanga-area quads such as `maxar_031311103033`).
@@ -91,10 +94,11 @@ Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases 
 | Path | Role |
 |------|------|
 | `geoagent/` | Agent orchestration package — available by request; contact the author (see License) |
+| `knowledge/sops/` | Curated **public** emergency-guidance markdown (FEMA / Cal OES / Ready.gov / NWS) for Knowledge RAG |
 | `perception/` | ViPDE inference entrypoints, configs, docs; proprietary package lives under `vipde/` (local only) |
 | `web/` | FastAPI backend + React / Vite / Leaflet UI |
-| `scripts/` | Offline pipeline CLIs (align, fusion, VLM, reports, model download) — may be omitted in some distributions |
-| `data/` | Local imagery, aligned AOIs, sessions, indexes (not in git) |
+| `scripts/` | Offline pipeline CLIs (align, fusion, VLM, reports, knowledge index, model download) — may be omitted in some distributions |
+| `data/` | Local imagery, aligned AOIs, sessions, indexes, Chroma store (not in git) |
 | `.cache/` | Hugging Face / torch caches (not in git) |
 
 ---
@@ -107,10 +111,11 @@ Demo geography centers on **Los Angeles wildfires (Jan 2025)** Maxar/NOAA cases 
 | Fusion / GIS | rasterio, geopandas, **Overture** footprints (LARIAC optional) |
 | Orchestration | LangGraph + LangChain |
 | LLMs | Local Llama 3.2 **1B** / Llama 3.1 **8B** / Llama 3.2 **11B Vision** (Hugging Face) |
-| RAG | sentence-transformers over assessment artifacts |
+| Case RAG | sentence-transformers over assessment artifacts |
+| Knowledge RAG | **Chroma** + sentence-transformers over `knowledge/sops/` |
 | Backend | FastAPI |
 | Frontend | React 18, TypeScript, Vite, Leaflet |
-| External | OpenStreetMap Overpass (hospitals), weather APIs, Maxar ARD + NOAA ERI imagery |
+| External | OpenStreetMap Overpass (**hospitals, fire, police, shelters**), weather APIs, Maxar ARD + NOAA ERI imagery |
 
 ---
 
@@ -174,7 +179,39 @@ More detail: [`web/README.md`](web/README.md).
 3. Explore the map: pre/post imagery, building polygons by damage class, hospitals.
 4. Run **VLM Building Review** on footprints and/or predicted damage; use **Agree** / **Reject** to label Verifier recommendations.
 5. Open **stats / report / hospitals** panels as needed.
-6. Ask grounded questions, e.g. damage counts for the active AOI, nearest hospitals, weather outlook, or a comparison to a past case.
+6. Ask grounded questions, for example:
+   - `how many destroyed buildings?`
+   - `which area should be handled first?` (3×3 directional priority)
+   - `where is the nearest fire station?` / police / shelter / hospital (click **Show on map**)
+   - `What does a Red Flag Warning mean?` or `how to mitigate wildfire impacts` (public SOP guidance + Sources)
+   - weather outlook or a short assessment report
+
+Ambiguous asks (e.g. “tell me something useful”) prompt a **clarify** menu instead of guessing case damage numbers.
+
+---
+
+## Chat tools & knowledge RAG
+
+Registered chat tools (rules-first router; LLM rewrites only, does not invent coordinates or counts):
+
+| Tool | Example asks |
+|------|----------------|
+| `get_damage_stats` | Damage counts; which NW/N/NE… cell to handle first |
+| `find_nearest_hospitals` | Nearest hospital / ER |
+| `find_nearest_facilities` | Fire station, police, emergency shelter |
+| `weather_context` | Current forecast / fire weather conditions |
+| `query_guidance` | FEMA PDA levels, NIMS/ICS, mitigation, FMAG, mutual aid |
+| `generate_report` | Short assessment narrative |
+| `query_historical` | Case overview when the ask is clearly about this assessment |
+
+Public SOP corpus: [`knowledge/sops/`](knowledge/sops/). With the full `geoagent` package:
+
+```bash
+pip install -r requirements.txt   # includes chromadb
+PYTHONPATH=. python scripts/build_knowledge_rag_index.py
+```
+
+Facility locations come from **OpenStreetMap** and may be incomplete—verify with official authorities before operational use.
 
 ---
 
