@@ -249,7 +249,7 @@ async def api_assessment_upload(
     ),
     lookup_facilities: bool = Form(
         False,
-        description="If true, run nearest-hospital lookup during the assessment pipeline",
+        description="If true, look up nearby hospitals, fire stations, police, and shelters during the assessment pipeline",
     ),
     session_id: str | None = Form(None),
     message: str | None = Form(None),

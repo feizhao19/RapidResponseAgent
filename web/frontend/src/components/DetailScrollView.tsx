@@ -28,7 +28,7 @@ const BASE_SECTIONS: { id: SectionId; label: string }[] = [
   { id: "hospitals", label: "Hospitals" },
 ];
 
-const VLM_SECTION = { id: "vlm" as const, label: "VLM Review" };
+const VLM_SECTION = { id: "vlm" as const, label: "VLM reasoning" };
 
 function resolveBasemapForAoi(
   choice: BasemapId,
@@ -57,6 +57,7 @@ type Props = {
   mapCenter?: [number, number];
   hospitals: Hospital[];
   externalMapFocus?: MapFocus | null;
+  onClearExternalMapFocus?: () => void;
   onRunVlm?: (
     mode: VlmReviewMode,
     options?: { damagedOnly?: boolean; limit?: number },
@@ -138,6 +139,7 @@ export function DetailScrollView({
   mapCenter,
   hospitals,
   externalMapFocus = null,
+  onClearExternalMapFocus,
   onRunVlm,
   onStopVlm,
   onVlmPreference,
@@ -346,6 +348,11 @@ export function DetailScrollView({
     scrollToSection("map");
   }, [externalMapFocus]);
 
+  const handleMapRecenter = useCallback(() => {
+    setMapFocus(null);
+    onClearExternalMapFocus?.();
+  }, [onClearExternalMapFocus]);
+
   const showBuildingOnMap = useCallback(
     (building: NonNullable<BuildingScopeStats["top_severe_buildings"]>[number]) => {
       const coordinates_wgs84 = building.centroid_wgs84;
@@ -451,6 +458,7 @@ export function DetailScrollView({
             onBasemapChange={handleBasemapChange}
             hospitals={hospitals}
             focusMap={mapFocus}
+            onRecenter={handleMapRecenter}
             situationWeather={situationWeather}
             situationLoading={situationLoading}
             situationError={situationError}
@@ -474,7 +482,11 @@ export function DetailScrollView({
         </DetailSection>
 
         {showVlmSection && (
-          <DetailSection id="vlm" title="VLM Building Review" sectionRef={setSectionRef("vlm")}>
+          <DetailSection
+            id="vlm"
+            title="Visual Verifier（VLM reasoning）"
+            sectionRef={setSectionRef("vlm")}
+          >
             <VlmArbitrationPanel
               detail={detail}
               onShowBuildingOnMap={showVlmBuildingOnMap}

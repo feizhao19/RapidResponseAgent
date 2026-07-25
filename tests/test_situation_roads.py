@@ -241,6 +241,7 @@ class SituationRoadsBuildTests(unittest.TestCase):
         md = format_situation_roads_markdown(payload)
         self.assertIn("Road conditions", md)
         self.assertIn("incidents", md)
+        self.assertIn("#map-road?", md)
 
     def test_osm_fallback_when_lcs_empty(self) -> None:
         def lcs_fetch(_url: str):

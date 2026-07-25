@@ -639,11 +639,6 @@ select {
   font-size: 0.78rem;
 }
 
-.upload-disaster-date .chat-action-panel-hint {
-  display: block;
-  margin-top: 0.25rem;
-}
-
 .upload-actions {
   margin-top: 0.65rem;
 }
@@ -991,6 +986,85 @@ select {
 
 .chat-md .chat-map-link:hover {
   color: var(--text-primary);
+}
+
+.priority-region-highlight {
+  animation: priority-region-pulse 1.9s ease-in-out infinite;
+}
+
+.priority-grid-cell {
+  stroke-linejoin: round;
+}
+
+.priority-grid-focused {
+  animation: priority-region-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes priority-region-pulse {
+  0%,
+  100% {
+    stroke-opacity: 0.9;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
+}
+
+.priority-region-tooltip {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+  padding: 0 !important;
+  box-shadow: none !important;
+  white-space: normal !important;
+  text-align: center;
+}
+
+.priority-region-tooltip-focus {
+  font-size: 0.72rem !important;
+}
+
+.priority-region-tooltip::before {
+  display: none !important;
+}
+
+.priority-cell-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  line-height: 1.2;
+  min-width: 5.6rem;
+  border-radius: 7px;
+  padding: 0.35rem 0.45rem;
+}
+
+.priority-cell-label-head {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.priority-cell-label-score {
+  opacity: 0.95;
+}
+
+.priority-cell-label-stats {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.95;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .priority-region-highlight,
+  .priority-grid-focused {
+    animation: none;
+  }
 }
 
 .chat-md blockquote {
@@ -2064,6 +2138,7 @@ select {
   margin-left: 10px;
 }
 
+.leaflet-recenter-aoi-control,
 .leaflet-region-select-control,
 .leaflet-buildings-layer-control,
 .leaflet-situation-weather-control,
@@ -2077,6 +2152,7 @@ select {
   box-shadow: var(--glass-shadow-sm);
 }
 
+.leaflet-recenter-aoi-control button,
 .leaflet-region-select-control button,
 .leaflet-buildings-layer-control button,
 .leaflet-situation-weather-control button,
@@ -2091,6 +2167,11 @@ select {
   min-width: 6.5rem;
 }
 
+.leaflet-recenter-aoi-control button:hover:not(:disabled) {
+  background: rgba(0, 113, 227, 0.1);
+  color: var(--accent);
+}
+
 .leaflet-region-select-control button.active,
 .leaflet-buildings-layer-control button.active,
 .leaflet-situation-weather-control button.active,
@@ -2099,6 +2180,7 @@ select {
   color: var(--accent);
 }
 
+.leaflet-recenter-aoi-control button:disabled,
 .leaflet-region-select-control button:disabled,
 .leaflet-buildings-layer-control button:disabled,
 .leaflet-situation-weather-control button:disabled,
@@ -2546,9 +2628,12 @@ body.map-region-dragging {
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid var(--glass-border, var(--border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-elevated, rgba(255, 255, 255, 0.04)) 88%, var(--accent) 12%);
+  border: 1px solid var(--glass-border-dark, var(--border));
+  border-radius: var(--radius-md, 8px);
+  background: var(--glass-bg-subtle, var(--surface-elevated, rgba(255, 255, 255, 0.04)));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--glass-shadow-sm);
 }
 
 .vlm-run-actions {
@@ -2558,18 +2643,20 @@ body.map-region-dragging {
 }
 
 .vlm-run-btn {
-  border: 1px solid var(--border);
-  background: var(--surface-elevated, rgba(255, 255, 255, 0.04));
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--text-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 6px);
   padding: 0.35rem 0.7rem;
   font: inherit;
   font-size: 0.85rem;
   cursor: pointer;
+  box-shadow: var(--glass-shadow-sm);
 }
 
 .vlm-run-btn:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 0, 0, 0.14);
 }
 
 .vlm-run-btn:disabled {
@@ -2578,10 +2665,15 @@ body.map-region-dragging {
 }
 
 .vlm-run-btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  font-weight: 600;
+  background: rgba(72, 72, 74, 0.88);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #f2f2f7;
+  font-weight: 500;
+}
+
+.vlm-run-btn-primary:hover:not(:disabled) {
+  background: rgba(72, 72, 74, 0.96);
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .vlm-run-btn-stop {
@@ -2664,8 +2756,10 @@ body.map-region-dragging {
 
 .vlm-tab-active {
   color: var(--text-primary);
-  border-color: var(--accent, #0a84ff);
-  background: rgba(10, 132, 255, 0.1);
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--glass-shadow-sm);
+  font-weight: 600;
 }
 
 .vlm-summary-row {

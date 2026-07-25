@@ -5,7 +5,9 @@ import {
   MapContainer,
   Marker,
   Popup,
+  Rectangle,
   TileLayer,
+  Tooltip,
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
@@ -124,6 +126,8 @@ type Props = {
   situationRoads?: SituationRoads | null;
   situationRoadsLoading?: boolean;
   situationRoadsError?: string | null;
+  /** Cleared focus / chat deep-link after user recenters on the AOI. */
+  onRecenter?: () => void;
 };
 
 function boundsToLeaflet(
@@ -141,6 +145,74 @@ function FitBounds({ bounds }: { bounds: [number, number, number, number] }) {
   useEffect(() => {
     map.fitBounds(boundsToLeaflet(bounds), { padding: [24, 24] });
   }, [bounds, map]);
+  return null;
+}
+
+/** One-shot recenter when the user clicks the Recenter control. */
+function RecenterAoiView({
+  bounds,
+  requestKey,
+}: {
+  bounds: [number, number, number, number] | undefined;
+  requestKey: number;
+}) {
+  const map = useMap();
+  const lastKeyRef = useRef(0);
+
+  useEffect(() => {
+    if (!bounds || requestKey <= 0 || requestKey === lastKeyRef.current) return;
+    lastKeyRef.current = requestKey;
+    map.invalidateSize({ pan: false });
+    map.flyToBounds(boundsToLeaflet(bounds), { padding: [28, 28], duration: 0.7, maxZoom: 17 });
+  }, [bounds, requestKey, map]);
+
+  return null;
+}
+
+function RecenterAoiControl({
+  disabled,
+  onRecenter,
+}: {
+  disabled?: boolean;
+  onRecenter: () => void;
+}) {
+  const map = useMap();
+  const onRecenterRef = useRef(onRecenter);
+  onRecenterRef.current = onRecenter;
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+
+  useEffect(() => {
+    const control = new L.Control({ position: "topleft" });
+    control.onAdd = () => {
+      const container = L.DomUtil.create("div", "leaflet-recenter-aoi-control");
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+
+      const button = L.DomUtil.create("button", "", container);
+      button.type = "button";
+      button.textContent = "Recenter";
+      button.title = "Fit the map back to this AOI";
+      button.disabled = Boolean(disabledRef.current);
+      button.addEventListener("click", () => {
+        if (!disabledRef.current) onRecenterRef.current();
+      });
+      return container;
+    };
+    control.addTo(map);
+    return () => {
+      control.remove();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const button = map
+      .getContainer()
+      .querySelector(".leaflet-recenter-aoi-control button") as HTMLButtonElement | null;
+    if (!button) return;
+    button.disabled = Boolean(disabled);
+  }, [disabled, map]);
+
   return null;
 }
 
@@ -166,12 +238,33 @@ function FocusMapTarget({
     lastFocusKeyRef.current = focus.key;
 
     map.invalidateSize({ pan: false });
+
+    if (focus.kind === "region") {
+      const overview = focus.aoiBounds ?? focus.bounds_wgs84;
+      const [west, south, east, north] = overview;
+      map.flyToBounds(
+        [
+          [south, west],
+          [north, east],
+        ],
+        { padding: [40, 40], duration: 0.8, maxZoom: 16 },
+      );
+      return;
+    }
+
     const [lon, lat] = focus.coordinates_wgs84;
     const targetZoom = Math.max(map.getZoom(), 15);
     map.flyTo([lat, lon], targetZoom, { duration: 0.75 });
     const timer = window.setTimeout(() => {
       if (focus.kind === "hospital") {
         const marker = markerRefs.current[focus.hospitalKey];
+        const popup = marker?.getPopup();
+        if (popup) popup.options.autoPan = false;
+        marker?.openPopup();
+        return;
+      }
+      if (focus.kind === "road") {
+        const marker = markerRefs.current[`road-${focus.roadId}`];
         const popup = marker?.getPopup();
         if (popup) popup.options.autoPan = false;
         marker?.openPopup();
@@ -204,6 +297,179 @@ function FocusMapTarget({
   }, [map]);
 
   return null;
+}
+
+function priorityRegionStyle(priority?: number): L.PathOptions {
+  if (priority === 1) {
+    return {
+      color: "#c2410c",
+      weight: 2.5,
+      fillColor: "#ea580c",
+      fillOpacity: 0.16,
+      className: "priority-region-highlight priority-region-p1",
+    };
+  }
+  if (priority === 2) {
+    return {
+      color: "#b45309",
+      weight: 2.2,
+      fillColor: "#d97706",
+      fillOpacity: 0.13,
+      className: "priority-region-highlight priority-region-p2",
+    };
+  }
+  return {
+    color: "#a16207",
+    weight: 2,
+    fillColor: "#ca8a04",
+    fillOpacity: 0.1,
+    className: "priority-region-highlight priority-region-p3",
+  };
+}
+
+/** Hex → RGB for sequential colormap interpolation. */
+function hexToRgb(hex: string): [number, number, number] {
+  const raw = hex.replace("#", "");
+  const value = Number.parseInt(raw, 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const to = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((channel) => {
+    const s = channel / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Opaque label chip matching the cell fill hue. */
+function tooltipSurfaceColor(fillHex: string): string {
+  const [r, g, b] = hexToRgb(fillHex);
+  // Slightly deepen so the chip reads as the same family as the translucent fill.
+  const deepen = 0.12;
+  return rgbToHex(r * (1 - deepen), g * (1 - deepen), b * (1 - deepen));
+}
+
+function contrastingInk(bgHex: string): { text: string; muted: string; destroyed: string; major: string; minor: string } {
+  const light = relativeLuminance(bgHex) > 0.52;
+  if (light) {
+    return {
+      text: "#0f172a",
+      muted: "#334155",
+      destroyed: "#9f1239",
+      major: "#075985",
+      minor: "#92400e",
+    };
+  }
+  return {
+    text: "#f8fafc",
+    muted: "#e2e8f0",
+    destroyed: "#fecaca",
+    major: "#bae6fd",
+    minor: "#fde68a",
+  };
+}
+
+/**
+ * Relative severity sequential ramp (low → high):
+ * slate gray → sky blue → amber → crimson.
+ * Inspired by cool→warm hazard maps / ColorBrewer YlOrRd spirit,
+ * but starts cooler (gray/blue) for low impact so empty cells stay quiet.
+ */
+const SEVERITY_RAMP: Array<{ t: number; hex: string }> = [
+  { t: 0, hex: "#cbd5e1" },
+  { t: 0.2, hex: "#93c5fd" },
+  { t: 0.45, hex: "#3b82f6" },
+  { t: 0.7, hex: "#f59e0b" },
+  { t: 1, hex: "#dc2626" },
+];
+
+function lerpSeverityColor(t: number): string {
+  const x = Math.max(0, Math.min(1, t));
+  let lo = SEVERITY_RAMP[0];
+  let hi = SEVERITY_RAMP[SEVERITY_RAMP.length - 1];
+  for (let i = 0; i < SEVERITY_RAMP.length - 1; i += 1) {
+    if (x >= SEVERITY_RAMP[i].t && x <= SEVERITY_RAMP[i + 1].t) {
+      lo = SEVERITY_RAMP[i];
+      hi = SEVERITY_RAMP[i + 1];
+      break;
+    }
+  }
+  const span = hi.t - lo.t || 1;
+  const u = (x - lo.t) / span;
+  const [r0, g0, b0] = hexToRgb(lo.hex);
+  const [r1, g1, b1] = hexToRgb(hi.hex);
+  return rgbToHex(r0 + (r1 - r0) * u, g0 + (g1 - g0) * u, b0 + (b1 - b0) * u);
+}
+
+function cellScore(cell: {
+  impact_score: number;
+  destroyed: number;
+  major: number;
+  minor: number;
+}): number {
+  // Color must follow the same Score shown on the label.
+  if (cell.impact_score > 0) return cell.impact_score;
+  // Fallback only when Score is missing: match backend weights (destroyed=3, major=2, minor=1).
+  return cell.destroyed * 3 + cell.major * 2 + cell.minor;
+}
+
+function cellRelativeSeverity(
+  cell: { impact_score: number; destroyed: number; major: number; minor: number },
+  maxImpact: number,
+): number {
+  const score = cellScore(cell);
+  if (maxImpact <= 0 || score <= 0) return 0;
+  // Sqrt easing spreads mid-range cells so the map isn't one red blob + gray.
+  return Math.sqrt(Math.min(1, score / maxImpact));
+}
+
+function gridCellStyle(
+  cell: {
+    impact_score: number;
+    destroyed: number;
+    major: number;
+    minor: number;
+    priority?: number;
+  },
+  options: { maxImpact: number; focused: boolean },
+): L.PathOptions {
+  const { maxImpact, focused } = options;
+  const t = cellRelativeSeverity(cell, maxImpact);
+  const fillColor = lerpSeverityColor(t);
+  const stroke = t <= 0.05 ? "#64748b" : t >= 0.75 ? "#7f1d1d" : t >= 0.45 ? "#1d4ed8" : "#475569";
+  return {
+    color: focused ? "#0f172a" : stroke,
+    weight: focused ? 3 : cell.priority ? 2.2 : 1.35,
+    fillColor,
+    // Keep fills readable on imagery; still scale a bit with severity.
+    fillOpacity: focused ? 0.5 : 0.28 + t * 0.3,
+    className: focused
+      ? "priority-grid-cell priority-grid-focused"
+      : "priority-grid-cell",
+  };
+}
+
+function directionShortLabel(direction: string): string {
+  const raw = direction.trim();
+  if (!raw) return "";
+  const map: Record<string, string> = {
+    Northwest: "NW",
+    North: "N",
+    Northeast: "NE",
+    West: "W",
+    Center: "C",
+    East: "E",
+    Southwest: "SW",
+    South: "S",
+    Southeast: "SE",
+  };
+  return map[raw] || raw;
 }
 
 function BuildingsPane() {
@@ -335,6 +601,7 @@ export function MapPanel({
   situationRoads = null,
   situationRoadsLoading = false,
   situationRoadsError = null,
+  onRecenter,
 }: Props) {
   const markerRefs = useRef<Record<string, L.Marker>>({});
   const buildingLayerRefs = useRef<Record<string, L.Layer>>({});
@@ -345,6 +612,13 @@ export function MapPanel({
   const [situationVisible, setSituationVisible] = useState(false);
   const [roadsVisible, setRoadsVisible] = useState(false);
   const [hourIndex, setHourIndex] = useState(0);
+  const [recenterRequestKey, setRecenterRequestKey] = useState(0);
+
+  const handleRecenter = useCallback(() => {
+    if (!bounds) return;
+    setRecenterRequestKey((key) => key + 1);
+    onRecenter?.();
+  }, [bounds, onRecenter]);
 
   const toggleRegionSelect = useCallback(() => {
     setRegionSelectEnabled((current) => {
@@ -385,6 +659,12 @@ export function MapPanel({
   useEffect(() => {
     setHourIndex(0);
   }, [situationWeather?.fetched_at]);
+
+  useEffect(() => {
+    if (focusMap?.kind === "road") {
+      setRoadsVisible(true);
+    }
+  }, [focusMap]);
   const basemapOptions = useMemo<BasemapOption[]>(
     () => [
       { id: "street", label: "Street", available: true },
@@ -457,6 +737,8 @@ export function MapPanel({
           <StreetOverlayPane />
           <SituationPanes />
           <BasemapControl basemap={basemap} options={basemapOptions} onChange={onBasemapChange} />
+          <RecenterAoiControl disabled={!bounds} onRecenter={handleRecenter} />
+          {bounds && <RecenterAoiView bounds={bounds} requestKey={recenterRequestKey} />}
           <RegionSelectControl
             enabled={regionSelectEnabled}
             onToggle={toggleRegionSelect}
@@ -622,6 +904,124 @@ export function MapPanel({
                 </Popup>
               </Marker>
             )}
+          {focusMap?.kind === "road" && (
+            <Marker
+              key={`chat-road-focus-${focusMap.key}`}
+              position={[focusMap.coordinates_wgs84[1], focusMap.coordinates_wgs84[0]]}
+              icon={facilityFocusIcon}
+              ref={(marker) => {
+                const refKey = `road-${focusMap.roadId}`;
+                if (marker) {
+                  markerRefs.current[refKey] = marker;
+                } else {
+                  delete markerRefs.current[refKey];
+                }
+              }}
+            >
+              <Popup minWidth={220} maxWidth={300}>
+                <div className="hospital-popup">
+                  <div className="hospital-popup-title">{focusMap.name}</div>
+                  <dl className="hospital-popup-details">
+                    {focusMap.roadKind && (
+                      <>
+                        <dt>Type</dt>
+                        <dd>{String(focusMap.roadKind).replace(/_/g, " ")}</dd>
+                      </>
+                    )}
+                    {focusMap.severity && (
+                      <>
+                        <dt>Severity</dt>
+                        <dd>{focusMap.severity}</dd>
+                      </>
+                    )}
+                  </dl>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+          {focusMap?.kind === "region" &&
+            (focusMap.cells && focusMap.cells.length > 0 ? (
+              <>
+                {(() => {
+                  const maxImpact = Math.max(
+                    1,
+                    ...focusMap.cells.map((item) => cellScore(item)),
+                  );
+                  return focusMap.cells.map((cell) => {
+                    const focused =
+                      (focusMap.priority != null && cell.priority === focusMap.priority) ||
+                      (focusMap.direction != null &&
+                        cell.direction.toUpperCase() === focusMap.direction.toUpperCase()) ||
+                      (cell.bounds_wgs84[0] === focusMap.bounds_wgs84[0] &&
+                        cell.bounds_wgs84[1] === focusMap.bounds_wgs84[1] &&
+                        cell.bounds_wgs84[2] === focusMap.bounds_wgs84[2] &&
+                        cell.bounds_wgs84[3] === focusMap.bounds_wgs84[3]);
+                    const t = cellRelativeSeverity(cell, maxImpact);
+                    const fillColor = lerpSeverityColor(t);
+                    const chipBg = tooltipSurfaceColor(fillColor);
+                    const ink = contrastingInk(chipBg);
+                    return (
+                      <Rectangle
+                        key={`grid-${focusMap.key}-${cell.direction}`}
+                        bounds={[
+                          [cell.bounds_wgs84[1], cell.bounds_wgs84[0]],
+                          [cell.bounds_wgs84[3], cell.bounds_wgs84[2]],
+                        ]}
+                        pathOptions={gridCellStyle(cell, { maxImpact, focused })}
+                      >
+                        <Tooltip
+                          permanent
+                          direction="center"
+                          className={
+                            focused
+                              ? "priority-region-tooltip priority-region-tooltip-focus"
+                              : "priority-region-tooltip"
+                          }
+                        >
+                          <div
+                            className="priority-cell-label"
+                            style={{
+                              background: chipBg,
+                              color: ink.text,
+                              boxShadow: focused
+                                ? "0 0 0 2px rgba(248,250,252,0.9), 0 6px 16px rgba(15,23,42,0.28)"
+                                : "0 6px 16px rgba(15,23,42,0.22)",
+                            }}
+                          >
+                            <div className="priority-cell-label-head">
+                              {cell.priority
+                                ? `P${cell.priority} · ${directionShortLabel(cell.direction) || cell.direction}`
+                                : directionShortLabel(cell.direction) || cell.direction}
+                            </div>
+                            <div className="priority-cell-label-score" style={{ color: ink.muted }}>
+                              Score {cell.impact_score}
+                            </div>
+                            <div className="priority-cell-label-stats">
+                              <span style={{ color: ink.destroyed }}>D {cell.destroyed}</span>
+                              <span style={{ color: ink.major }}>Ma {cell.major}</span>
+                              <span style={{ color: ink.minor }}>Mi {cell.minor}</span>
+                            </div>
+                          </div>
+                        </Tooltip>
+                      </Rectangle>
+                    );
+                  });
+                })()}
+              </>
+            ) : (
+              <Rectangle
+                key={`chat-region-focus-${focusMap.key}`}
+                bounds={[
+                  [focusMap.bounds_wgs84[1], focusMap.bounds_wgs84[0]],
+                  [focusMap.bounds_wgs84[3], focusMap.bounds_wgs84[2]],
+                ]}
+                pathOptions={priorityRegionStyle(focusMap.priority)}
+              >
+                <Tooltip permanent direction="center" className="priority-region-tooltip">
+                  {focusMap.name}
+                </Tooltip>
+              </Rectangle>
+            ))}
         </MapContainer>
         {situationWeather && (
           <SituationOverlay
