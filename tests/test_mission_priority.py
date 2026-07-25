@@ -9,6 +9,7 @@ from geoagent.tools.hierarchical_router import route_message
 from geoagent.tools.intent_router import IntentResult
 from geoagent.tools.mission_priority import (
     build_mission_priority,
+    ensure_mission_facility_map_links,
     format_mission_priority_markdown,
     recommend_action,
     wants_mission_priority,
@@ -108,6 +109,34 @@ class MissionPriorityEngineTests(unittest.TestCase):
         self.assertIn("**Recommend:**", md)
         self.assertIn("Demo Hospital", md)
         self.assertIn("Demo Fire", md)
+        self.assertIn("#map-hospital?", md)
+        self.assertIn("#map-facility?", md)
+        self.assertIn("[Demo Hospital](#map-hospital?", md)
+        self.assertIn("[Demo Fire](#map-facility?", md)
+        self.assertIsNotNone(mission.get("map_grid"))
+        self.assertEqual(len(mission["map_grid"]["cells"]), 9)
+        self.assertIsNotNone(mission["priorities"][0]["cell_bounds_wgs84"])
+        self.assertIn("#map-region?", mission["priorities"][0]["title_markdown"])
+        self.assertIn("g=", mission["priorities"][0]["map_href"])
+
+        plain = (
+            "### Priority 1 — Northwest\n"
+            "Nearest hospital is Demo Hospital at 1 km.\n"
+            "Nearest fire station is Demo Fire at 2 km.\n"
+            "### Priority 2 — Center\n"
+            "Nearest hospital is Demo Hospital at 0 km."
+        )
+        restored = ensure_mission_facility_map_links(plain, mission)
+        self.assertIn("[Demo Hospital](#map-hospital?", restored)
+        self.assertIn("[Demo Fire](#map-facility?", restored)
+        self.assertIn("[Priority 1 — Northwest](#map-region?", restored)
+        self.assertIn("[Priority 2 — Center](#map-region?", restored)
+        self.assertEqual(restored.count("[Demo Hospital](#map-hospital?"), 2)
+        self.assertIn("### [Priority 1 — Northwest](#map-region?", restored)
+        self.assertNotIn("Show on map", restored)
+        self.assertNotIn("Priority areas on map", restored)
+        # Wording around the links stays intact.
+        self.assertIn("Nearest hospital is [Demo Hospital](#map-hospital?", restored)
 
 
 class MissionPriorityRoutingTests(unittest.TestCase):

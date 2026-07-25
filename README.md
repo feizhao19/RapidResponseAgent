@@ -85,7 +85,7 @@ GPU-heavy steps run in the assessment job; the chat path is rules-first tool rou
 | Stage | What you get |
 |-------|----------------|
 | **Assess** | Start from **post** GeoTIFF (pre optional): auto-find & align pre when missing — only scenes from the **previous calendar month or earlier** (≥1 month gap vs disaster/post date from form, GeoTIFF tags/filename, or known events) → ViPDE damage perception → fuse with **Overture** footprints (LARIAC optional) |
-| **Verify** | Llama Vision review of mismatches / damage; Agree–Reject preferences for optional DPO LoRA |
+| **Verify** | **Visual Verifier** (VLM reasoning): Llama Vision review of mismatches / damage; Agree–Reject preferences for optional DPO LoRA |
 | **Orient** | Map with pre/post overlays, damage polygons, region stats; **Weather** (temp wash + humidity labels + wind + 24h timeline) and **Roads** (Caltrans closures + CHP incidents); chat deep-links to hospitals and fire / police / shelters |
 | **Decide** | Tool-grounded Q&A: damage counts, which area first (3×3 impact grid), critical facilities, weather / situation outlook, road conditions, short report |
 | **Advise** | Knowledge guidance from curated public SOPs under `knowledge/sops/` (citations required; not a substitute for official orders) |
@@ -183,7 +183,7 @@ More detail: [`web/README.md`](web/README.md).
 4. Toggle map layers (left stack, same glass controls as Select area / Polygons):
    - **Weather** (off by default) — temperature heat wash, per-cell °F + humidity %, animated wind, forecast timeline
    - **Roads** (off by default) — Caltrans lane/road closures + CHP incidents near the AOI
-5. Run **VLM Building Review** on footprints and/or predicted damage; use **Agree** / **Reject** to label Verifier recommendations.
+5. Run **Visual Verifier** on footprints and/or predicted damage; use **Agree** / **Reject** to label Verifier recommendations.
 6. Open **stats / report / hospitals** panels as needed.
 7. Ask grounded questions, for example:
    - `how many destroyed buildings?`

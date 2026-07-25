@@ -43,9 +43,10 @@ class NearestHospitalTests(unittest.TestCase):
         self.assertLess(distance, 40)
 
     @patch(
-        "geoagent.tools.nearest_hospital.fetch_hospitals_overpass",
+        "geoagent.tools.nearest_facilities.fetch_facilities_overpass",
         return_value=[
             {
+                "kind": "hospital",
                 "name": "Saint John's Hospital",
                 "distance_km": 12.3,
                 "distance_mi": 7.6,
@@ -115,8 +116,8 @@ class NearestHospitalTests(unittest.TestCase):
         self.assertIn("| N/A | N/A | N/A | N/A | N/A | N/A | N/A |", markdown)
 
     @patch(
-        "geoagent.agents.facilities_agent.find_nearest_hospitals",
-        side_effect=RuntimeError("Overpass hospital lookup failed: timed out"),
+        "geoagent.agents.facilities_agent.find_all_nearest_facilities",
+        side_effect=RuntimeError("Overpass facilities lookup failed: timed out"),
     )
     def test_facilities_agent_continues_on_lookup_failure(self, _mock_find) -> None:
         import json
@@ -140,6 +141,14 @@ class NearestHospitalTests(unittest.TestCase):
             payload = json.loads(output_path.read_text())
             self.assertEqual(payload["status"], "unavailable")
             self.assertIn("facilities", result["completed_steps"])
+            all_path = Path(result["nearest_facilities_json"])
+            self.assertTrue(all_path.is_file())
+            combined = json.loads(all_path.read_text())
+            self.assertEqual(combined["facility_kind"], "all")
+            self.assertIn("fire_station", combined.get("by_kind") or {})
+            self.assertTrue((aoi_out / "nearest_fire_stations.json").is_file())
+            self.assertTrue((aoi_out / "nearest_police.json").is_file())
+            self.assertTrue((aoi_out / "nearest_shelters.json").is_file())
             shutil.rmtree(aligned_dir)
 
 

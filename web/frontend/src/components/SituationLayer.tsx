@@ -190,11 +190,11 @@ export function SituationRoadControl({ enabled, onToggle, disabled }: ControlPro
   return null;
 }
 
-function windIcon(
+function windVisual(
   speedKmh: number | null,
   fromDeg: number | null,
   delaySec = 0,
-): L.DivIcon {
+) {
   const mph = kmhToMph(speedKmh) ?? 0;
   const intensity = Math.max(0, Math.min(1, mph / 35));
   const width = Math.round(22 + intensity * 10);
@@ -203,6 +203,15 @@ function windIcon(
   // Faster wind → shorter period (1.6s … 0.75s).
   const duration = (1.55 - intensity * 0.8).toFixed(2);
   const delay = (delaySec % 1.4).toFixed(2);
+  return { width, height, rot, duration, delay };
+}
+
+function windIcon(
+  speedKmh: number | null,
+  fromDeg: number | null,
+  delaySec = 0,
+): L.DivIcon {
+  const { width, height, rot, duration, delay } = windVisual(speedKmh, fromDeg, delaySec);
   return L.divIcon({
     className: "situation-wind-icon",
     iconSize: [width, height],
@@ -217,6 +226,56 @@ function windIcon(
       <div class="situation-wind-head" aria-hidden="true"></div>
     </div>`,
   });
+}
+
+/**
+ * Update wind marker in place so CSS particle animation keeps running.
+ * Remounting / setIcon would restart animations at 0% (the “snap to start” feel).
+ * Do not change --wind-dur / --wind-delay: CSS restarts keyframes when those vars change.
+ */
+function patchWindMarker(
+  marker: L.Marker,
+  speedKmh: number | null,
+  fromDeg: number | null,
+) {
+  const { width, height, rot } = windVisual(speedKmh, fromDeg);
+  const root = marker.getElement();
+  const wind = root?.querySelector(".situation-wind") as HTMLElement | null;
+  if (!wind || !root) return false;
+
+  wind.style.setProperty("--wind-rot", `${rot}deg`);
+  wind.style.width = `${width}px`;
+  wind.style.height = `${height}px`;
+
+  root.style.width = `${width}px`;
+  root.style.height = `${height}px`;
+  root.style.marginLeft = `${-width / 2}px`;
+  root.style.marginTop = `${-height / 2}px`;
+
+  const icon = marker.options.icon;
+  if (icon) {
+    icon.options.iconSize = [width, height];
+    icon.options.iconAnchor = [width / 2, height / 2];
+  }
+  return true;
+}
+
+function patchClimateLabel(
+  marker: L.Marker,
+  tempC: number | null,
+  rhPct: number | null,
+) {
+  const root = marker.getElement();
+  if (!root) return false;
+  const f = cToF(tempC);
+  const tempText = f != null ? `${f}°` : "—";
+  const rhText = rhPct != null ? `${Math.round(rhPct)}%` : "—";
+  const tempEl = root.querySelector(".situation-cell-temp");
+  const rhEl = root.querySelector(".situation-cell-rh");
+  if (!tempEl || !rhEl) return false;
+  tempEl.textContent = tempText;
+  rhEl.textContent = rhText;
+  return true;
 }
 
 function tempLabelIcon(tempC: number | null): L.DivIcon {
@@ -301,7 +360,7 @@ export function SituationTempLabels({ weather, hourIndex }: { weather: Situation
     <>
       {points.map((p) => (
         <Marker
-          key={`temp-${p.id}-${hourIndex}`}
+          key={p.id}
           position={[p.lat, p.lon]}
           icon={tempLabelIcon(p.sample.temperature_c)}
           interactive={false}
@@ -324,15 +383,50 @@ export function SituationClimateLabels({
   return (
     <>
       {points.map((p) => (
-        <Marker
-          key={`climate-${p.id}-${hourIndex}`}
-          position={[p.lat, p.lon]}
-          icon={cellClimateIcon(p.sample.temperature_c, p.sample.relative_humidity_pct)}
-          interactive={false}
-          pane="tempLabelPane"
+        <ClimateLabelMarker
+          key={p.id}
+          lat={p.lat}
+          lon={p.lon}
+          temperatureC={p.sample.temperature_c}
+          humidityPct={p.sample.relative_humidity_pct}
         />
       ))}
     </>
+  );
+}
+
+function ClimateLabelMarker({
+  lat,
+  lon,
+  temperatureC,
+  humidityPct,
+}: {
+  lat: number;
+  lon: number;
+  temperatureC: number | null;
+  humidityPct: number | null;
+}) {
+  const markerRef = useRef<L.Marker | null>(null);
+  const iconRef = useRef(cellClimateIcon(temperatureC, humidityPct));
+
+  useEffect(() => {
+    const marker = markerRef.current;
+    if (!marker) return;
+    if (!patchClimateLabel(marker, temperatureC, humidityPct)) {
+      const next = cellClimateIcon(temperatureC, humidityPct);
+      iconRef.current = next;
+      marker.setIcon(next);
+    }
+  }, [temperatureC, humidityPct]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={[lat, lon]}
+      icon={iconRef.current}
+      interactive={false}
+      pane="tempLabelPane"
+    />
   );
 }
 
@@ -341,15 +435,53 @@ export function SituationWindLayer({ weather, hourIndex }: { weather: SituationW
   return (
     <>
       {points.map((p, index) => (
-        <Marker
-          key={`wind-${p.id}-${hourIndex}`}
-          position={[p.lat, p.lon]}
-          icon={windIcon(p.sample.wind_speed_kmh, p.sample.wind_direction_deg, (index * 0.17) % 1.4)}
-          interactive={false}
-          pane="windPane"
+        <WindMarker
+          key={p.id}
+          lat={p.lat}
+          lon={p.lon}
+          speedKmh={p.sample.wind_speed_kmh}
+          fromDeg={p.sample.wind_direction_deg}
+          delaySec={(index * 0.17) % 1.4}
         />
       ))}
     </>
+  );
+}
+
+function WindMarker({
+  lat,
+  lon,
+  speedKmh,
+  fromDeg,
+  delaySec,
+}: {
+  lat: number;
+  lon: number;
+  speedKmh: number | null;
+  fromDeg: number | null;
+  delaySec: number;
+}) {
+  const markerRef = useRef<L.Marker | null>(null);
+  const iconRef = useRef(windIcon(speedKmh, fromDeg, delaySec));
+
+  useEffect(() => {
+    const marker = markerRef.current;
+    if (!marker) return;
+    if (!patchWindMarker(marker, speedKmh, fromDeg)) {
+      const next = windIcon(speedKmh, fromDeg, delaySec);
+      iconRef.current = next;
+      marker.setIcon(next);
+    }
+  }, [speedKmh, fromDeg, delaySec]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={[lat, lon]}
+      icon={iconRef.current}
+      interactive={false}
+      pane="windPane"
+    />
   );
 }
 

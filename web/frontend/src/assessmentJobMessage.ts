@@ -43,7 +43,7 @@ const STEP_LABELS: Record<string, string> = {
   perception: "ViPDE damage perception",
   fusion: "Fusing damage to building footprints",
   stats: "Computing AOI statistics",
-  facilities: "Looking up nearest hospitals",
+  facilities: "Looking up nearest facilities",
   report: "Generating assessment report",
   visualization: "Rendering map overlays",
   finalize: "Finalizing outputs",
@@ -78,6 +78,16 @@ export function formatInitialAssessmentMarkdown(userMessage: string): string {
 function stepIcon(step: string, progress: JobProgress | undefined, job: AssessmentJob): string {
   const completed = new Set(progress?.completed_steps ?? job.completed_steps ?? []);
   if (completed.has(step)) return "✓";
+
+  // If a later step is already done, earlier ones finished too (covers skipped
+  // steps that forgot to emit step_done, e.g. upload skip_preprocess).
+  const stepIndex = STEP_ORDER.indexOf(step as (typeof STEP_ORDER)[number]);
+  if (stepIndex >= 0) {
+    for (let i = stepIndex + 1; i < STEP_ORDER.length; i += 1) {
+      if (completed.has(STEP_ORDER[i])) return "✓";
+    }
+  }
+
   if (progress?.current_step === step) return "→";
   return "·";
 }

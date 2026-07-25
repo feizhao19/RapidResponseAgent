@@ -1,6 +1,6 @@
 # RapidResponseAgent Web UI
 
-Interactive web interface: multi-turn chat with server sessions, AOI map (damage polygons + **Weather** / **Roads** situation layers), assessment reports, hospital lookup, image upload jobs, and selectable local Llama models.
+Interactive web interface: multi-turn chat with server sessions, AOI map (damage polygons + **Weather** / **Roads** situation layers), assessment reports, facility lookup (hospitals / fire / police / shelters), image upload jobs, and selectable local Llama models.
 
 ## Stack
 

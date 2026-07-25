@@ -45,7 +45,7 @@ import { ChatPanel } from "./components/ChatPanel";
 import { DetailScrollView } from "./components/DetailScrollView";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
 import type { MapFocus } from "./mapFocus";
-import { toMapFocus, type HospitalMapDeepLink } from "./mapDeepLink";
+import { toMapFocus, type ChatMapDeepLink } from "./mapDeepLink";
 
 function intentMeta(response: AskResponse): string {
   if (!response.intent) return "RapidResponseAgent";
@@ -560,7 +560,7 @@ export default function App() {
     }
   }
 
-  function handleHospitalMapLink(link: HospitalMapDeepLink) {
+  function handleHospitalMapLink(link: ChatMapDeepLink) {
     chatMapFocusKeyRef.current += 1;
     setChatMapFocus(toMapFocus(link, chatMapFocusKeyRef.current));
   }
@@ -723,6 +723,7 @@ export default function App() {
                 mapCenter={mapCenter}
                 hospitals={hospitals}
                 externalMapFocus={chatMapFocus}
+                onClearExternalMapFocus={() => setChatMapFocus(null)}
                 onRunVlm={handleRunVlm}
                 onStopVlm={handleStopVlm}
                 onVlmPreference={handleVlmPreference}

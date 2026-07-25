@@ -460,8 +460,8 @@ export function VlmArbitrationPanel({
       <div className="vlm-panel">
         {runControls}
         <p className="stats-note">
-          No VLM building review yet. Use <strong>Run VLM</strong> on this past assessment to verify
-          footprint detections and predicted damage with Vision.
+          No Visual Verifier results yet. Use <strong>Run VLM</strong> on this past assessment to
+          verify footprint detections and predicted damage with vision-language reasoning.
         </p>
       </div>
     );
@@ -479,7 +479,7 @@ export function VlmArbitrationPanel({
       {runControls}
 
       {availableTabs.length > 1 && (
-        <div className="vlm-tabs" role="tablist" aria-label="VLM review modes">
+        <div className="vlm-tabs" role="tablist" aria-label="Visual Verifier modes">
           {availableTabs.map((item) => (
             <button
               key={item.id}

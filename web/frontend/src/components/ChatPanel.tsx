@@ -6,7 +6,7 @@ import { LLM_MODEL_OPTIONS } from "../api/client";
 import { buildDefaultAnalysisPrompt } from "../assessmentPrompt";
 import type { ChatSession } from "../chatSessions";
 import { formatAssessedCaseLabel } from "../caseLabel";
-import { parseHospitalMapDeepLink, type HospitalMapDeepLink } from "../mapDeepLink";
+import { parseChatMapDeepLink, type ChatMapDeepLink } from "../mapDeepLink";
 import { ActivityTimeline } from "./ActivityTimeline";
 
 const SIDEBAR_COLLAPSED_KEY = "geoagent.chat.sidebarCollapsed";
@@ -54,7 +54,7 @@ type Props = {
     lookupFacilities: boolean;
     message: string;
   }) => void;
-  onHospitalMapLink?: (link: HospitalMapDeepLink) => void;
+  onHospitalMapLink?: (link: ChatMapDeepLink) => void;
 };
 
 export function ChatPanel({
@@ -373,8 +373,8 @@ export function ChatPanel({
                       remarkPlugins={[remarkGfm]}
                       components={{
                         a: ({ href, children }) => {
-                          const facilityLink = parseHospitalMapDeepLink(href);
-                          if (facilityLink && onHospitalMapLink) {
+                          const mapLink = parseChatMapDeepLink(href);
+                          if (mapLink && onHospitalMapLink) {
                             return (
                               <button
                                 type="button"
@@ -383,7 +383,7 @@ export function ChatPanel({
                                 onClick={(event) => {
                                   event.preventDefault();
                                   event.stopPropagation();
-                                  onHospitalMapLink(facilityLink);
+                                  onHospitalMapLink(mapLink);
                                 }}
                               >
                                 {children}
@@ -485,9 +485,6 @@ export function ChatPanel({
                   disabled={busy}
                   onChange={(event) => setDisasterDate(event.target.value)}
                 />
-                <span className="chat-action-panel-hint">
-                  Pre scenes must be from the previous calendar month or earlier (≥1 month gap). Auto-inferred from filename, GeoTIFF tags, or known events when empty.
-                </span>
               </label>
             )}
             <label className="upload-auto-match">
@@ -497,7 +494,12 @@ export function ChatPanel({
                 disabled={busy}
                 onChange={(event) => setLookupFacilities(event.target.checked)}
               />
-              Look up nearby hospitals during assessment
+              <span>
+                Look up nearby facilities during assessment
+                <span className="chat-action-panel-hint" style={{ display: "block" }}>
+                  Hospitals, fire stations, police, and shelters (OpenStreetMap)
+                </span>
+              </span>
             </label>
           </div>
 
