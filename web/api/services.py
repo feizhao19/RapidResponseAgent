@@ -84,6 +84,22 @@ def remove_aoi(aoi_id: str, *, delete_files: bool = True) -> dict[str, Any]:
     return result
 
 
+def get_situation_weather(aoi_id: str) -> dict[str, Any]:
+    """Environmental Situation Layer forecast grid for the AOI map timeline."""
+    find_aoi_record(aoi_id)
+    from geoagent.tools.situation_weather import get_situation_weather_cached
+
+    return get_situation_weather_cached(aoi_id)
+
+
+def get_situation_roads(aoi_id: str) -> dict[str, Any]:
+    """Environmental Situation Layer road closures / restrictions for the AOI map."""
+    find_aoi_record(aoi_id)
+    from geoagent.tools.situation_roads import get_situation_roads_cached
+
+    return get_situation_roads_cached(aoi_id)
+
+
 def get_aoi_detail(aoi_id: str) -> dict[str, Any]:
     record = find_aoi_record(aoi_id)
     aligned_dir = aligned_dir_for_record(record)

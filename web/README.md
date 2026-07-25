@@ -1,6 +1,6 @@
 # RapidResponseAgent Web UI
 
-Interactive web interface: multi-turn chat with server sessions, AOI map, assessment reports, hospital lookup, image upload jobs, and selectable local Llama models.
+Interactive web interface: multi-turn chat with server sessions, AOI map (damage polygons + **Weather** / **Roads** situation layers), assessment reports, hospital lookup, image upload jobs, and selectable local Llama models.
 
 ## Stack
 
@@ -99,6 +99,8 @@ python scripts/verify_llm_gpu.py --model 11b
 | GET | `/api/aois/{aoi_id}` | AOI detail, stats, report, hospitals |
 | DELETE | `/api/aois/{aoi_id}` | Remove past assessment |
 | GET | `/api/aois/{aoi_id}/buildings` | Building footprints (GeoJSON) |
+| GET | `/api/aois/{aoi_id}/situation/weather` | Environmental Situation Layer: Open-Meteo 4×4 grid + 24h timeline |
+| GET | `/api/aois/{aoi_id}/situation/roads` | Road conditions: Caltrans LCS + CHP (OSM fallback) |
 | GET | `/api/data/{path}` | Static artifacts (PNG, JSON) |
 | POST | `/api/ask` | Chat / agent turn (`model`, `session_id` optional) |
 | POST | `/api/sessions` | Create server-side chat session |

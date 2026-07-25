@@ -26,6 +26,8 @@ from web.api.services import (
     get_building_chip,
     get_buildings_geojson_wgs84,
     get_imagery_preview,
+    get_situation_roads,
+    get_situation_weather,
     iter_ask_events,
     list_aois,
     remove_aoi,
@@ -68,6 +70,32 @@ def api_aoi_detail(aoi_id: str) -> dict:
         return get_aoi_detail(aoi_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/aois/{aoi_id}/situation/weather")
+def api_aoi_situation_weather(aoi_id: str) -> dict:
+    """Environmental Situation Layer: 24h Open-Meteo grid for map timeline."""
+    try:
+        return get_situation_weather(aoi_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/aois/{aoi_id}/situation/roads")
+def api_aoi_situation_roads(aoi_id: str) -> dict:
+    """Environmental Situation Layer: Caltrans LCS / OSM road closures near the AOI."""
+    try:
+        return get_situation_roads(aoi_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.delete("/api/aois/{aoi_id}")

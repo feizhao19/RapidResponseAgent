@@ -306,6 +306,91 @@ export async function getBuildingsGeoJson(aoiId: string): Promise<GeoJSON.Featur
   return fetchJson(`/api/aois/${encodeURIComponent(aoiId)}/buildings`);
 }
 
+export type SituationHourSample = {
+  temperature_c: number | null;
+  relative_humidity_pct: number | null;
+  wind_speed_kmh: number | null;
+  wind_gusts_kmh: number | null;
+  wind_direction_deg: number | null;
+  humidity_band?: "danger" | "elevated" | "moderate" | "moist";
+  temperature_band?: "cool" | "mild" | "warm" | "hot" | "extreme";
+};
+
+export type SituationCell = {
+  id: string;
+  row: number;
+  col: number;
+  lat: number;
+  lon: number;
+  polygon: [number, number][];
+  series: SituationHourSample[];
+};
+
+export type SituationWeather = {
+  schema_version: string;
+  aoi_id: string;
+  display_name?: string;
+  fetched_at: string;
+  source: string;
+  disclaimer: string;
+  bounds_wgs84: [number, number, number, number];
+  centroid_wgs84?: [number, number] | null;
+  hours: string[];
+  cells: SituationCell[];
+  centroid_series: SituationHourSample[];
+};
+
+export async function getSituationWeather(aoiId: string): Promise<SituationWeather> {
+  return fetchJson(`/api/aois/${encodeURIComponent(aoiId)}/situation/weather`);
+}
+
+export type SituationRoadFeature = {
+  id: string;
+  kind: "closure" | "lane_closure" | "construction" | "restriction" | "incident";
+  severity: "closed" | "major" | "minor";
+  status: "active" | "scheduled";
+  title: string;
+  description?: string | null;
+  route?: string | null;
+  direction?: string | null;
+  lanes_closed?: string | null;
+  type_of_work?: string | null;
+  facility?: string | null;
+  updated_at?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  reported_at?: string | null;
+  source: string;
+  district?: string | null;
+  geometry: GeoJSON.Point | GeoJSON.LineString;
+};
+
+export type SituationRoads = {
+  schema_version: string;
+  aoi_id: string;
+  display_name?: string;
+  fetched_at: string;
+  source: string;
+  disclaimer: string;
+  bounds_wgs84: [number, number, number, number];
+  centroid_wgs84?: [number, number] | null;
+  features: SituationRoadFeature[];
+  summary: {
+    feature_count: number;
+    closure_count: number;
+    lane_closure_count: number;
+    construction_count: number;
+    incident_count?: number;
+    active_count: number;
+    scheduled_count: number;
+  };
+  notes?: string[];
+};
+
+export async function getSituationRoads(aoiId: string): Promise<SituationRoads> {
+  return fetchJson(`/api/aois/${encodeURIComponent(aoiId)}/situation/roads`);
+}
+
 export async function createServerSession(input: {
   title?: string;
   sessionId?: string;

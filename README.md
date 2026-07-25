@@ -4,7 +4,7 @@
 
 When a wildfire or other disaster moves through a city, emergency teams do not need another model demo. They need a clear picture of what burned, where people and crews should go next, and answers they can trust—without waiting for a full perception rerun every time someone asks a follow-up.
 
-**RapidResponseAgent** is designed around that workflow. Given a post-disaster scene, the system automatically retrieves matching pre-disaster imagery, aligns the image pair, and generates durable assessment artifacts. A grounded conversation then sits on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, weather context, short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
+**RapidResponseAgent** is built for that loop. Start from a **post-disaster** scene—pre-event imagery is optional. The system can automatically find a matching pre-disaster source, align the pair, and turn the result into durable assessment artifacts. A grounded conversation then sits on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, **live Environmental Situation Layer** (temperature / humidity / wind + road conditions), short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
 
 ### From pixels to a decision surface
 
@@ -71,12 +71,12 @@ Post imagery (+ optional pre)
     → Visual Verifier (+ optional human Agree/Reject → DPO)
     → Assessment artifacts (stats · map · facilities · report)
     → Tool-routed chat
-         ├─ Case tools   (counts, 3×3 priority, hospitals/fire/police/shelters, weather)
+         ├─ Case tools   (counts, 3×3 priority, hospitals/fire/police/shelters, weather, roads)
          ├─ Case RAG     (this AOI’s indexed artifacts)
          └─ Knowledge RAG (public FEMA / Cal OES / Ready.gov SOPs, with Sources)
 ```
 
-GPU-heavy steps run in the assessment job; the chat path is rules-first tool routing plus local LLMs for wording. Ambiguous questions clarify. We will **gradually release** more of this stack as licensing allows.
+GPU-heavy steps run in the assessment job; the chat path is rules-first tool routing plus local LLMs for wording. Multi-tool plans pause for a **yes / no** confirm before running. Ambiguous questions clarify. We will **gradually release** more of this stack as licensing allows.
 
 ---
 
@@ -86,8 +86,8 @@ GPU-heavy steps run in the assessment job; the chat path is rules-first tool rou
 |-------|----------------|
 | **Assess** | Start from **post** GeoTIFF (pre optional): auto-find & align pre when missing → ViPDE damage perception → fuse with **Overture** footprints (LARIAC optional) |
 | **Verify** | Llama Vision review of mismatches / damage; Agree–Reject preferences for optional DPO LoRA |
-| **Orient** | Map with pre/post overlays, damage polygons, region stats; chat deep-links to hospitals and fire / police / shelters |
-| **Decide** | Tool-grounded Q&A: damage counts, which area first (3×3 impact grid), critical facilities, weather, short report |
+| **Orient** | Map with pre/post overlays, damage polygons, region stats; **Weather** (temp wash + humidity labels + wind + 24h timeline) and **Roads** (Caltrans closures + CHP incidents); chat deep-links to hospitals and fire / police / shelters |
+| **Decide** | Tool-grounded Q&A: damage counts, which area first (3×3 impact grid), critical facilities, weather / situation outlook, road conditions, short report |
 | **Advise** | Knowledge guidance from curated public SOPs under `knowledge/sops/` (citations required; not a substitute for official orders) |
 
 ---
@@ -118,7 +118,7 @@ GPU-heavy steps run in the assessment job; the chat path is rules-first tool rou
 | Knowledge RAG | **Chroma** + sentence-transformers over `knowledge/sops/` |
 | Backend | FastAPI |
 | Frontend | React 18, TypeScript, Vite, Leaflet |
-| External | OpenStreetMap Overpass (**hospitals, fire, police, shelters**), weather APIs, Maxar ARD + NOAA ERI imagery |
+| External | OpenStreetMap Overpass (**hospitals, fire, police, shelters**), Open-Meteo weather, Caltrans LCS + CHP road feeds, Maxar ARD + NOAA ERI imagery |
 
 ---
 
@@ -180,14 +180,22 @@ More detail: [`web/README.md`](web/README.md).
 1. Start a chat session and select an indexed AOI (or upload imagery for a **new assessment**).
 2. Wait for the pipeline job (`aligning` → `running` → `completed`).
 3. Explore the map: pre/post imagery, building polygons by damage class, hospitals.
-4. Run **VLM Building Review** on footprints and/or predicted damage; use **Agree** / **Reject** to label Verifier recommendations.
-5. Open **stats / report / hospitals** panels as needed.
-6. Ask grounded questions, for example:
+4. Toggle map layers (left stack, same glass controls as Select area / Polygons):
+   - **Weather** (off by default) — temperature heat wash, per-cell °F + humidity %, animated wind, forecast timeline
+   - **Roads** (off by default) — Caltrans lane/road closures + CHP incidents near the AOI
+5. Run **VLM Building Review** on footprints and/or predicted damage; use **Agree** / **Reject** to label Verifier recommendations.
+6. Open **stats / report / hospitals** panels as needed.
+7. Ask grounded questions, for example:
    - `how many destroyed buildings?`
    - `which area should be handled first?` (3×3 directional priority)
    - `where is the nearest fire station?` / police / shelter / hospital (click **Show on map**)
+   - `What’s the weather / wind / humidity / temperature for this AOI?`
+   - `How will conditions change over the next 6 hours?` (map-aligned Situation outlook)
+   - `Any road closures near this AOI?` / `What are the road conditions nearby?`
    - `What does a Red Flag Warning mean?` or `how to mitigate wildfire impacts` (public SOP guidance + Sources)
-   - weather outlook or a short assessment report
+   - a short assessment report
+
+When the router plans **more than one tool** (e.g. road conditions + damage stats), chat pauses with a confirm card—reply **yes** to continue or **no** to cancel. That keeps multi-step ops briefs intentional instead of silently chaining tools.
 
 Ambiguous asks (e.g. “tell me something useful”) prompt a **clarify** menu instead of guessing case damage numbers.
 
@@ -200,12 +208,18 @@ After assessment artifacts exist, chat is a **tool loop**, not an open-ended ess
 | Tool | Example asks |
 |------|----------------|
 | `get_damage_stats` | Damage counts; which NW/N/NE… cell to handle first |
+| `get_mission_priority` | EOC-style Priority 1/2/3 from 3×3 damage + nearest hospital/fire |
 | `find_nearest_hospitals` | Nearest hospital / ER |
 | `find_nearest_facilities` | Fire station, police, emergency shelter |
-| `weather_context` | Current forecast / fire weather conditions |
+| `weather_context` | Weather / wind / humidity / temperature for this AOI; fire weather; Next 6/12/24h situation outlook (same Open-Meteo grid as the map Weather layer) |
+| `situation_roads` | Road closures / lane restrictions / CHP incidents near this AOI (Caltrans LCS + CHP; OSM fallback) |
 | `query_guidance` | FEMA PDA levels, NIMS/ICS, mitigation, FMAG, mutual aid |
 | `generate_report` | Short assessment narrative |
 | `query_historical` | Case overview when the ask is clearly about this assessment |
+
+**Environmental Situation Layer (map + chat):** Weather and Roads are advisory operational context for the selected AOI—not part of building-damage statistics. Verify road routing with Caltrans QuickMap / 511 before field use.
+
+**Multi-tool confirm:** If a turn would call several case tools, the UI asks you to confirm the plan first (yes / no). Example: *“I can run road conditions, then damage statistics… Reply yes to continue.”*
 
 Public SOP corpus: [`knowledge/sops/`](knowledge/sops/). With the full `geoagent` package:
 
@@ -215,7 +229,7 @@ PYTHONPATH=. python scripts/build_knowledge_rag_index.py
 ```
 
 Facility locations come from **OpenStreetMap** and may be incomplete—verify with official authorities before operational use.
-
+Road and weather feeds are live snapshots and can lag real conditions.
 ---
 
 ## Visual Verifier preferences → DPO (optional)
