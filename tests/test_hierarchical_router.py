@@ -39,6 +39,36 @@ class HierarchicalRouterTests(unittest.TestCase):
         self.assertEqual(route.l3, "forecast")
         self.assertEqual(route.legacy_intent, "weather_context")
 
+    def test_weather_conditions_not_hospitals(self) -> None:
+        """Regression: 'er ' in 'weather' must not route to hospitals."""
+        for question in (
+            "can you give me the current weather conditions?",
+            "can you provide me the weather conditions?",
+        ):
+            with self.subTest(question=question):
+                route = route_message(question)
+                self.assertEqual(route.l2, "weather")
+                self.assertEqual(route.legacy_intent, "weather_context")
+                self.assertEqual(route.tools(), ["weather_context"])
+                tools = plan_tools(question, classify_intent(question, use_llm=False), use_llm=False)
+                self.assertEqual(tools, ["weather_context"])
+
+    def test_er_whole_word_still_hospitals(self) -> None:
+        route = route_message("where is the nearest ER?")
+        self.assertEqual(route.l2, "hospitals")
+        self.assertEqual(route.tools(), ["find_nearest_hospitals"])
+
+    def test_final_report_routes_to_generate_report(self) -> None:
+        for question in (
+            "can you give me the final report",
+            "generate the assessment report",
+            "write a full FEMA report",
+        ):
+            with self.subTest(question=question):
+                route = route_message(question)
+                self.assertEqual(route.l2, "report")
+                self.assertIn("generate_report", route.tools())
+
     def test_report_full(self) -> None:
         route = route_message("write a full FEMA report for this AOI")
         self.assertEqual(route.l1, "chat_qa")
@@ -71,6 +101,20 @@ class HierarchicalRouterTests(unittest.TestCase):
         result = classify_intent("nearest hospital please", use_llm=False)
         tools = plan_tools("nearest hospital please", result, use_llm=False)
         self.assertEqual(tools, ["find_nearest_hospitals"])
+
+    def test_situation_outlook_routes_to_weather(self) -> None:
+        route = route_message("How will conditions change over the next 6 hours?")
+        self.assertEqual(route.l1, "chat_qa")
+        self.assertEqual(route.l2, "weather")
+        self.assertEqual(route.tools(), ["weather_context"])
+        self.assertEqual(route.legacy_intent, "weather_context")
+
+    def test_road_closures_routes_to_roads(self) -> None:
+        route = route_message("any road closures near this AOI?")
+        self.assertEqual(route.l1, "chat_qa")
+        self.assertEqual(route.l2, "roads")
+        self.assertEqual(route.tools(), ["situation_roads"])
+        self.assertEqual(route.legacy_intent, "roads_context")
 
 
 if __name__ == "__main__":

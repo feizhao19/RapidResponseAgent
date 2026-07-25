@@ -5,7 +5,8 @@ import { ReportPanel } from "./ReportPanel";
 import { StatsPanel } from "./StatsPanel";
 import { VlmArbitrationPanel } from "./VlmArbitrationPanel";
 import { BuildingScopeToggle } from "./BuildingScopeToggle";
-import type { AoiDetail, AssessmentJob, Hospital, VlmReviewMode } from "../api/client";
+import type { AoiDetail, AssessmentJob, Hospital, SituationRoads, SituationWeather, VlmReviewMode } from "../api/client";
+import { getSituationRoads, getSituationWeather } from "../api/client";
 import {
   filterBuildingsGeojson,
   hasFusedBuildingView,
@@ -159,6 +160,64 @@ export function DetailScrollView({
   const [mapFocus, setMapFocus] = useState<MapFocus | null>(null);
   const mapFocusKeyRef = useRef(0);
   const ticking = useRef(false);
+  const [situationWeather, setSituationWeather] = useState<SituationWeather | null>(null);
+  const [situationLoading, setSituationLoading] = useState(false);
+  const [situationError, setSituationError] = useState<string | null>(null);
+  const [situationRoads, setSituationRoads] = useState<SituationRoads | null>(null);
+  const [situationRoadsLoading, setSituationRoadsLoading] = useState(false);
+  const [situationRoadsError, setSituationRoadsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSituationWeather(null);
+    setSituationError(null);
+    setSituationLoading(true);
+    getSituationWeather(aoiId)
+      .then((payload) => {
+        if (!cancelled) {
+          setSituationWeather(payload);
+          setSituationError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setSituationWeather(null);
+          setSituationError(err instanceof Error ? err.message : "situation_unavailable");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSituationLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aoiId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSituationRoads(null);
+    setSituationRoadsError(null);
+    setSituationRoadsLoading(true);
+    getSituationRoads(aoiId)
+      .then((payload) => {
+        if (!cancelled) {
+          setSituationRoads(payload);
+          setSituationRoadsError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setSituationRoads(null);
+          setSituationRoadsError(err instanceof Error ? err.message : "roads_unavailable");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSituationRoadsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aoiId]);
 
   const showVlmSection = Boolean(detail?.aoi_id === aoiId);
 
@@ -392,6 +451,12 @@ export function DetailScrollView({
             onBasemapChange={handleBasemapChange}
             hospitals={hospitals}
             focusMap={mapFocus}
+            situationWeather={situationWeather}
+            situationLoading={situationLoading}
+            situationError={situationError}
+            situationRoads={situationRoads}
+            situationRoadsLoading={situationRoadsLoading}
+            situationRoadsError={situationRoadsError}
           />
         </DetailSection>
 

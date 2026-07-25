@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import { buildingChipUrl } from "../api/client";
-import type { Hospital } from "../api/client";
+import type { Hospital, SituationRoads, SituationWeather } from "../api/client";
 import { damageColor } from "../damageColors";
 import { BUILDING_SCOPE_HINTS, BUILDING_SCOPE_LABELS, type BuildingScope } from "../buildingScope";
 import { hospitalRowKey } from "../hospitalUtils";
@@ -24,6 +24,17 @@ import {
   type RegionSelection,
 } from "./MapRegionSelect";
 import { RegionStatsPopover } from "./RegionStatsPopover";
+import {
+  SituationChoroplethLayer,
+  SituationClimateLabels,
+  SituationLayerControl,
+  SituationOverlay,
+  SituationPanes,
+  SituationRoadChip,
+  SituationRoadControl,
+  SituationRoadLayer,
+  SituationWindLayer,
+} from "./SituationLayer";
 
 function escapeHtml(value: string): string {
   return value
@@ -107,6 +118,12 @@ type Props = {
   imageryReady?: boolean;
   hospitals?: Hospital[];
   focusMap?: MapFocus | null;
+  situationWeather?: SituationWeather | null;
+  situationLoading?: boolean;
+  situationError?: string | null;
+  situationRoads?: SituationRoads | null;
+  situationRoadsLoading?: boolean;
+  situationRoadsError?: string | null;
 };
 
 function boundsToLeaflet(
@@ -312,6 +329,12 @@ export function MapPanel({
   imageryReady = false,
   hospitals = [],
   focusMap = null,
+  situationWeather = null,
+  situationLoading = false,
+  situationError = null,
+  situationRoads = null,
+  situationRoadsLoading = false,
+  situationRoadsError = null,
 }: Props) {
   const markerRefs = useRef<Record<string, L.Marker>>({});
   const buildingLayerRefs = useRef<Record<string, L.Layer>>({});
@@ -319,6 +342,9 @@ export function MapPanel({
   const [regionSelectEnabled, setRegionSelectEnabled] = useState(false);
   const [regionSelection, setRegionSelection] = useState<RegionSelection | null>(null);
   const [showBuildingPolygons, setShowBuildingPolygons] = useState(true);
+  const [situationVisible, setSituationVisible] = useState(false);
+  const [roadsVisible, setRoadsVisible] = useState(false);
+  const [hourIndex, setHourIndex] = useState(0);
 
   const toggleRegionSelect = useCallback(() => {
     setRegionSelectEnabled((current) => {
@@ -329,6 +355,14 @@ export function MapPanel({
 
   const toggleBuildingPolygons = useCallback(() => {
     setShowBuildingPolygons((current) => !current);
+  }, []);
+
+  const toggleSituation = useCallback(() => {
+    setSituationVisible((current) => !current);
+  }, []);
+
+  const toggleRoads = useCallback(() => {
+    setRoadsVisible((current) => !current);
   }, []);
 
   const handleRegionSelection = useCallback((selection: RegionSelection | null) => {
@@ -343,7 +377,14 @@ export function MapPanel({
     setRegionSelectEnabled(false);
     setRegionSelection(null);
     setShowBuildingPolygons(true);
+    setSituationVisible(false);
+    setRoadsVisible(false);
+    setHourIndex(0);
   }, [aoiId, buildingScope, buildingsGeojson]);
+
+  useEffect(() => {
+    setHourIndex(0);
+  }, [situationWeather?.fetched_at]);
   const basemapOptions = useMemo<BasemapOption[]>(
     () => [
       { id: "street", label: "Street", available: true },
@@ -401,31 +442,20 @@ export function MapPanel({
 
   return (
     <div>
-      <p className="map-scope-note">
-        Building layer: <strong>{BUILDING_SCOPE_LABELS[buildingScope]}</strong>
-        {" — "}
-        {BUILDING_SCOPE_HINTS[buildingScope]}
-        {regionSelectEnabled && (
-          <>
-            {" · "}
-            <strong>Select area:</strong> drag on the map to summarize damage in the box
-          </>
-        )}
-        {!showBuildingPolygons && (
-          <>
-            {" · "}
-            <strong>Polygons hidden</strong>
-          </>
-        )}
-      </p>
       <div
         className={`map-wrap ${regionSelectEnabled ? "map-region-select-active" : ""}`}
         ref={mapWrapRef}
       >
-        <MapContainer center={mapCenter} zoom={15} style={{ height: "100%", width: "100%" }}>
+        <MapContainer
+          center={mapCenter}
+          zoom={15}
+          style={{ height: "100%", width: "100%" }}
+          attributionControl={false}
+        >
           <MapResizeHandler />
           <BuildingsPane />
           <StreetOverlayPane />
+          <SituationPanes />
           <BasemapControl basemap={basemap} options={basemapOptions} onChange={onBasemapChange} />
           <RegionSelectControl
             enabled={regionSelectEnabled}
@@ -436,6 +466,16 @@ export function MapPanel({
             visible={showBuildingPolygons}
             onToggle={toggleBuildingPolygons}
             disabled={!buildingsGeojson}
+          />
+          <SituationLayerControl
+            enabled={situationVisible}
+            onToggle={toggleSituation}
+            disabled={!situationWeather}
+          />
+          <SituationRoadControl
+            enabled={roadsVisible}
+            onToggle={toggleRoads}
+            disabled={!situationRoads}
           />
           <MapRegionSelect
             enabled={regionSelectEnabled}
@@ -476,6 +516,18 @@ export function MapPanel({
               opacity={STREET_REFERENCE_TILES.opacity}
             />
           )}
+          {situationWeather && situationVisible && (
+            <>
+              <SituationChoroplethLayer
+                weather={situationWeather}
+                hourIndex={hourIndex}
+                fillMode="temperature"
+              />
+              <SituationClimateLabels weather={situationWeather} hourIndex={hourIndex} />
+              <SituationWindLayer weather={situationWeather} hourIndex={hourIndex} />
+            </>
+          )}
+          {situationRoads && roadsVisible && <SituationRoadLayer roads={situationRoads} />}
           {bounds && <FitBounds bounds={bounds} />}
           <FocusMapTarget
             focus={focusMap}
@@ -571,6 +623,21 @@ export function MapPanel({
               </Marker>
             )}
         </MapContainer>
+        {situationWeather && (
+          <SituationOverlay
+            weather={situationWeather}
+            hourIndex={hourIndex}
+            onHourChange={setHourIndex}
+            visible={situationVisible}
+          />
+        )}
+        {situationRoads && (
+          <SituationRoadChip
+            roads={situationRoads}
+            visible={roadsVisible}
+            withTimeline={Boolean(situationWeather && situationVisible)}
+          />
+        )}
         {regionSelection && popoverAnchor && (
           <RegionStatsPopover
             stats={regionSelection.stats}
@@ -599,6 +666,59 @@ export function MapPanel({
           </span>
         )}
       </div>
+      <p className="map-scope-note">
+        Building layer: <strong>{BUILDING_SCOPE_LABELS[buildingScope]}</strong>
+        {" — "}
+        {BUILDING_SCOPE_HINTS[buildingScope]}
+        {regionSelectEnabled && (
+          <>
+            {" · "}
+            <strong>Select area:</strong> drag on the map to summarize damage in the box
+          </>
+        )}
+        {!showBuildingPolygons && (
+          <>
+            {" · "}
+            <strong>Polygons hidden</strong>
+          </>
+        )}
+        {situationWeather && situationVisible && (
+          <>
+            {" · "}
+            <strong>Situation layer</strong> — Temp wash + humidity labels + timeline scrub
+          </>
+        )}
+        {situationRoads && roadsVisible && (
+          <>
+            {" · "}
+            <strong>Road conditions</strong> — closures / lane restrictions
+          </>
+        )}
+        {situationLoading && (
+          <>
+            {" · "}
+            Loading situation forecast…
+          </>
+        )}
+        {situationRoadsLoading && (
+          <>
+            {" · "}
+            Loading road conditions…
+          </>
+        )}
+        {situationError && !situationWeather && (
+          <>
+            {" · "}
+            Situation forecast unavailable
+          </>
+        )}
+        {situationRoadsError && !situationRoads && (
+          <>
+            {" · "}
+            Road conditions unavailable
+          </>
+        )}
+      </p>
     </div>
   );
 }
