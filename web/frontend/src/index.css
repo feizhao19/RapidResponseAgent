@@ -989,7 +989,7 @@ select {
 }
 
 .priority-region-highlight {
-  animation: priority-region-pulse 1.9s ease-in-out infinite;
+  /* no pulse — keep region focus quiet */
 }
 
 .priority-grid-cell {
@@ -997,17 +997,7 @@ select {
 }
 
 .priority-grid-focused {
-  animation: priority-region-pulse 1.9s ease-in-out infinite;
-}
-
-@keyframes priority-region-pulse {
-  0%,
-  100% {
-    stroke-opacity: 0.9;
-  }
-  50% {
-    stroke-opacity: 1;
-  }
+  /* focused cell uses heavier stroke only; no animation */
 }
 
 .priority-region-tooltip {
@@ -1015,8 +1005,8 @@ select {
   border: none !important;
   border-radius: 0 !important;
   color: inherit !important;
-  font-size: 0.68rem !important;
-  font-weight: 600 !important;
+  font-size: 0.66rem !important;
+  font-weight: 550 !important;
   letter-spacing: 0.01em;
   padding: 0 !important;
   box-shadow: none !important;
@@ -1025,7 +1015,7 @@ select {
 }
 
 .priority-region-tooltip-focus {
-  font-size: 0.72rem !important;
+  font-size: 0.68rem !important;
 }
 
 .priority-region-tooltip::before {
@@ -1035,36 +1025,43 @@ select {
 .priority-cell-label {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
+  gap: 0.1rem;
   line-height: 1.2;
-  min-width: 5.6rem;
-  border-radius: 7px;
-  padding: 0.35rem 0.45rem;
+  min-width: 5.4rem;
+  border-radius: 6px;
+  padding: 0.3rem 0.4rem;
+  /* One shared glass chip — avoids a rainbow of label colors. */
+  background: rgba(248, 250, 252, 0.88);
+  color: #334155;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.priority-region-tooltip-focus .priority-cell-label {
+  background: rgba(248, 250, 252, 0.95);
+  border-color: rgba(71, 85, 105, 0.55);
+  box-shadow: 0 0 0 1px rgba(51, 65, 85, 0.25), 0 4px 12px rgba(15, 23, 42, 0.12);
 }
 
 .priority-cell-label-head {
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: 0.02em;
+  color: #1e293b;
 }
 
 .priority-cell-label-score {
-  opacity: 0.95;
+  color: #475569;
 }
 
 .priority-cell-label-stats {
   display: flex;
   justify-content: center;
-  gap: 0.35rem;
-  font-size: 0.64rem;
+  gap: 0.32rem;
+  font-size: 0.62rem;
   font-variant-numeric: tabular-nums;
-  opacity: 0.95;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .priority-region-highlight,
-  .priority-grid-focused {
-    animation: none;
-  }
+  color: #64748b;
 }
 
 .chat-md blockquote {

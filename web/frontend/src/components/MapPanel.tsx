@@ -300,30 +300,31 @@ function FocusMapTarget({
 }
 
 function priorityRegionStyle(priority?: number): L.PathOptions {
+  // Quiet fallback when full grid payload is missing.
   if (priority === 1) {
     return {
-      color: "#c2410c",
-      weight: 2.5,
-      fillColor: "#ea580c",
-      fillOpacity: 0.16,
-      className: "priority-region-highlight priority-region-p1",
+      color: "#64748b",
+      weight: 2.25,
+      fillColor: "#7a3a34",
+      fillOpacity: 0.42,
+      className: "priority-grid-cell priority-grid-focused",
     };
   }
   if (priority === 2) {
     return {
-      color: "#b45309",
-      weight: 2.2,
-      fillColor: "#d97706",
-      fillOpacity: 0.13,
-      className: "priority-region-highlight priority-region-p2",
+      color: "#7c8a9a",
+      weight: 1.5,
+      fillColor: "#a56d5f",
+      fillOpacity: 0.34,
+      className: "priority-grid-cell",
     };
   }
   return {
-    color: "#a16207",
-    weight: 2,
-    fillColor: "#ca8a04",
-    fillOpacity: 0.1,
-    className: "priority-region-highlight priority-region-p3",
+    color: "#7c8a9a",
+    weight: 1.25,
+    fillColor: "#b9a094",
+    fillOpacity: 0.26,
+    className: "priority-grid-cell",
   };
 }
 
@@ -339,54 +340,15 @@ function rgbToHex(r: number, g: number, b: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-function relativeLuminance(hex: string): number {
-  const [r, g, b] = hexToRgb(hex).map((channel) => {
-    const s = channel / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/** Opaque label chip matching the cell fill hue. */
-function tooltipSurfaceColor(fillHex: string): string {
-  const [r, g, b] = hexToRgb(fillHex);
-  // Slightly deepen so the chip reads as the same family as the translucent fill.
-  const deepen = 0.12;
-  return rgbToHex(r * (1 - deepen), g * (1 - deepen), b * (1 - deepen));
-}
-
-function contrastingInk(bgHex: string): { text: string; muted: string; destroyed: string; major: string; minor: string } {
-  const light = relativeLuminance(bgHex) > 0.52;
-  if (light) {
-    return {
-      text: "#0f172a",
-      muted: "#334155",
-      destroyed: "#9f1239",
-      major: "#075985",
-      minor: "#92400e",
-    };
-  }
-  return {
-    text: "#f8fafc",
-    muted: "#e2e8f0",
-    destroyed: "#fecaca",
-    major: "#bae6fd",
-    minor: "#fde68a",
-  };
-}
-
 /**
- * Relative severity sequential ramp (low → high):
- * slate gray → sky blue → amber → crimson.
- * Inspired by cool→warm hazard maps / ColorBrewer YlOrRd spirit,
- * but starts cooler (gray/blue) for low impact so empty cells stay quiet.
+ * Low-chroma sequential ramp (low → high Score).
+ * Stays in one warm family so the 3×3 reads as one layer, not a rainbow.
  */
 const SEVERITY_RAMP: Array<{ t: number; hex: string }> = [
-  { t: 0, hex: "#cbd5e1" },
-  { t: 0.2, hex: "#93c5fd" },
-  { t: 0.45, hex: "#3b82f6" },
-  { t: 0.7, hex: "#f59e0b" },
-  { t: 1, hex: "#dc2626" },
+  { t: 0, hex: "#c5ced9" },
+  { t: 0.35, hex: "#b9a094" },
+  { t: 0.65, hex: "#a56d5f" },
+  { t: 1, hex: "#7a3a34" },
 ];
 
 function lerpSeverityColor(t: number): string {
@@ -425,8 +387,8 @@ function cellRelativeSeverity(
 ): number {
   const score = cellScore(cell);
   if (maxImpact <= 0 || score <= 0) return 0;
-  // Sqrt easing spreads mid-range cells so the map isn't one red blob + gray.
-  return Math.sqrt(Math.min(1, score / maxImpact));
+  // Linear relative score — keeps mid cells from jumping too hot.
+  return Math.min(1, score / maxImpact);
 }
 
 function gridCellStyle(
@@ -442,16 +404,12 @@ function gridCellStyle(
   const { maxImpact, focused } = options;
   const t = cellRelativeSeverity(cell, maxImpact);
   const fillColor = lerpSeverityColor(t);
-  const stroke = t <= 0.05 ? "#64748b" : t >= 0.75 ? "#7f1d1d" : t >= 0.45 ? "#1d4ed8" : "#475569";
   return {
-    color: focused ? "#0f172a" : stroke,
-    weight: focused ? 3 : cell.priority ? 2.2 : 1.35,
+    color: focused ? "#334155" : "#7c8a9a",
+    weight: focused ? 2.4 : 1.15,
     fillColor,
-    // Keep fills readable on imagery; still scale a bit with severity.
-    fillOpacity: focused ? 0.5 : 0.28 + t * 0.3,
-    className: focused
-      ? "priority-grid-cell priority-grid-focused"
-      : "priority-grid-cell",
+    fillOpacity: focused ? 0.48 : 0.26 + t * 0.28,
+    className: focused ? "priority-grid-cell priority-grid-focused" : "priority-grid-cell",
   };
 }
 
@@ -956,10 +914,6 @@ export function MapPanel({
                         cell.bounds_wgs84[1] === focusMap.bounds_wgs84[1] &&
                         cell.bounds_wgs84[2] === focusMap.bounds_wgs84[2] &&
                         cell.bounds_wgs84[3] === focusMap.bounds_wgs84[3]);
-                    const t = cellRelativeSeverity(cell, maxImpact);
-                    const fillColor = lerpSeverityColor(t);
-                    const chipBg = tooltipSurfaceColor(fillColor);
-                    const ink = contrastingInk(chipBg);
                     return (
                       <Rectangle
                         key={`grid-${focusMap.key}-${cell.direction}`}
@@ -978,28 +932,19 @@ export function MapPanel({
                               : "priority-region-tooltip"
                           }
                         >
-                          <div
-                            className="priority-cell-label"
-                            style={{
-                              background: chipBg,
-                              color: ink.text,
-                              boxShadow: focused
-                                ? "0 0 0 2px rgba(248,250,252,0.9), 0 6px 16px rgba(15,23,42,0.28)"
-                                : "0 6px 16px rgba(15,23,42,0.22)",
-                            }}
-                          >
+                          <div className="priority-cell-label">
                             <div className="priority-cell-label-head">
                               {cell.priority
                                 ? `P${cell.priority} · ${directionShortLabel(cell.direction) || cell.direction}`
                                 : directionShortLabel(cell.direction) || cell.direction}
                             </div>
-                            <div className="priority-cell-label-score" style={{ color: ink.muted }}>
+                            <div className="priority-cell-label-score">
                               Score {cell.impact_score}
                             </div>
                             <div className="priority-cell-label-stats">
-                              <span style={{ color: ink.destroyed }}>D {cell.destroyed}</span>
-                              <span style={{ color: ink.major }}>Ma {cell.major}</span>
-                              <span style={{ color: ink.minor }}>Mi {cell.minor}</span>
+                              <span>D {cell.destroyed}</span>
+                              <span>Ma {cell.major}</span>
+                              <span>Mi {cell.minor}</span>
                             </div>
                           </div>
                         </Tooltip>
