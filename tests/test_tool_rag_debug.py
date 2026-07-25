@@ -290,7 +290,7 @@ class ToolRagDebugSuiteExtra(unittest.TestCase):
                 self.assertEqual(intent.intent, "clarify")
                 self.assertEqual(route.tools(), [])
 
-    def test_25_which_area_handled_first_is_spatial_stats(self) -> None:
+    def test_25_which_area_handled_first_is_mission_priority(self) -> None:
         history = [
             {"role": "user", "content": "how many destroyed buildings?"},
             {"role": "assistant", "content": "Destroyed: 1050"},
@@ -305,8 +305,8 @@ class ToolRagDebugSuiteExtra(unittest.TestCase):
             with self.subTest(q=q):
                 route = route_message(q, chat_history=history)
                 self.assertEqual(route.l1, "chat_qa", msg=route.rationale)
-                self.assertEqual(route.l2, "damage_stats", msg=route.rationale)
-                self.assertEqual(route.tools(), ["get_damage_stats"])
+                self.assertEqual(route.l2, "mission_priority", msg=route.rationale)
+                self.assertEqual(route.tools(), ["get_mission_priority"])
                 self.assertNotIn("New chat", route.clarification or "")
 
 
