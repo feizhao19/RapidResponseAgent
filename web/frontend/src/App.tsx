@@ -673,10 +673,8 @@ export default function App() {
         <div>
           <h1>RapidResponseAgent</h1>
           <p>
-            <a href="https://github.com/feizhao19/RapidDamageAssessment" target="_blank" rel="noreferrer">
-              ViPDE
-            </a>
-            -powered post-disaster assessment · Author:{" "}
+            Locally deployed AI agent system on open models for post-disaster
+            assessment · Author:{" "}
             <a href="https://feizhao19.github.io/" target="_blank" rel="noreferrer" className="app-header-author">
               Dr. Fei Zhao
             </a>
