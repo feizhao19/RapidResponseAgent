@@ -578,6 +578,7 @@ export async function uploadAssessment(input: {
   post: File;
   pre?: File | null;
   autoMatchPre: boolean;
+  disasterDate?: string | null;
   lookupFacilities?: boolean;
   sessionId?: string;
   message?: string;
@@ -588,6 +589,9 @@ export async function uploadAssessment(input: {
     form.append("pre", input.pre);
   }
   form.append("auto_match_pre", String(input.autoMatchPre));
+  if (input.disasterDate && input.disasterDate.trim()) {
+    form.append("disaster_date", input.disasterDate.trim());
+  }
   form.append("lookup_facilities", String(Boolean(input.lookupFacilities)));
   if (input.sessionId) {
     form.append("session_id", input.sessionId);

@@ -466,6 +466,7 @@ export default function App() {
     post: File;
     pre: File | null;
     autoMatchPre: boolean;
+    disasterDate?: string | null;
     lookupFacilities: boolean;
     message: string;
   }) {
@@ -497,6 +498,7 @@ export default function App() {
         post: input.post,
         pre: input.pre,
         autoMatchPre: input.autoMatchPre,
+        disasterDate: input.disasterDate,
         lookupFacilities: input.lookupFacilities,
         sessionId,
         message: input.message,

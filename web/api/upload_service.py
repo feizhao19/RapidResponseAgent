@@ -55,6 +55,7 @@ async def submit_assessment_upload(
     post: UploadFile,
     pre: UploadFile | None,
     auto_match_pre: bool,
+    disaster_date: str | None = None,
     lookup_facilities: bool = False,
     session_id: str | None = None,
     message: str | None = None,
@@ -100,6 +101,7 @@ async def submit_assessment_upload(
             "post_filename": post.filename,
             "pre_filename": pre.filename if pre else None,
             "auto_match_pre": auto_match_pre,
+            "disaster_date": disaster_date,
             "lookup_facilities": not skip_facilities,
         },
     )
@@ -114,6 +116,8 @@ async def submit_assessment_upload(
             pre_path=pre_path,
             auto_match_pre=auto_match_pre,
             aoi_id=aoi_id,
+            disaster_date=disaster_date,
+            post_filename=post.filename,
         )
     except Exception as exc:
         update_job(

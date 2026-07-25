@@ -623,6 +623,27 @@ select {
   line-height: 1.35;
 }
 
+.upload-disaster-date {
+  margin-top: 0.55rem;
+}
+
+.upload-disaster-date input[type="date"] {
+  width: 100%;
+  max-width: 12rem;
+  margin-top: 0.25rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.upload-disaster-date .chat-action-panel-hint {
+  display: block;
+  margin-top: 0.25rem;
+}
+
 .upload-actions {
   margin-top: 0.65rem;
 }

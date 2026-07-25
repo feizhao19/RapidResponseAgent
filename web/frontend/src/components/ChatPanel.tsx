@@ -50,6 +50,7 @@ type Props = {
     post: File;
     pre: File | null;
     autoMatchPre: boolean;
+    disasterDate?: string | null;
     lookupFacilities: boolean;
     message: string;
   }) => void;
@@ -80,6 +81,7 @@ export function ChatPanel({
   const [postFile, setPostFile] = useState<File | null>(null);
   const [preFile, setPreFile] = useState<File | null>(null);
   const [autoMatchPre, setAutoMatchPre] = useState(true);
+  const [disasterDate, setDisasterDate] = useState("");
   const [lookupFacilities, setLookupFacilities] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const [sidebarPeek, setSidebarPeek] = useState(false);
@@ -151,6 +153,7 @@ export function ChatPanel({
     setPostFile(null);
     setPreFile(null);
     setAutoMatchPre(true);
+    setDisasterDate("");
     setLookupFacilities(false);
     setDraft((current) => (current === previousAutoDraft ? "" : current));
   }
@@ -166,6 +169,7 @@ export function ChatPanel({
         post: postFile,
         pre: preFile,
         autoMatchPre: preFile ? false : autoMatchPre,
+        disasterDate: disasterDate.trim() || null,
         lookupFacilities,
         message,
       });
@@ -470,6 +474,22 @@ export function ChatPanel({
               />
               Auto-match pre-disaster imagery
             </label>
+            {(autoMatchPre || !preFile) && (
+              <label className="upload-field upload-disaster-date">
+                <span className="upload-field-label">
+                  Disaster / post date (optional)
+                </span>
+                <input
+                  type="date"
+                  value={disasterDate}
+                  disabled={busy}
+                  onChange={(event) => setDisasterDate(event.target.value)}
+                />
+                <span className="chat-action-panel-hint">
+                  Pre scenes must be from the previous calendar month or earlier (≥1 month gap). Auto-inferred from filename, GeoTIFF tags, or known events when empty.
+                </span>
+              </label>
+            )}
             <label className="upload-auto-match">
               <input
                 type="checkbox"
