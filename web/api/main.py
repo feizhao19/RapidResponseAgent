@@ -243,6 +243,10 @@ async def api_assessment_upload(
     post: UploadFile = File(..., description="Post-disaster GeoTIFF"),
     pre: UploadFile | None = File(None, description="Pre-disaster GeoTIFF (optional if auto_match_pre)"),
     auto_match_pre: bool = Form(False),
+    disaster_date: str | None = Form(
+        None,
+        description="Disaster/post acquisition date (YYYY-MM-DD). Pre scenes must be ≥1 month earlier.",
+    ),
     lookup_facilities: bool = Form(
         False,
         description="If true, run nearest-hospital lookup during the assessment pipeline",
@@ -260,6 +264,7 @@ async def api_assessment_upload(
             post=post,
             pre=pre,
             auto_match_pre=auto_match_pre,
+            disaster_date=disaster_date,
             lookup_facilities=lookup_facilities,
             session_id=session_id,
             message=message,

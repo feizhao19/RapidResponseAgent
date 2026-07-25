@@ -10,7 +10,7 @@ When a wildfire or other disaster moves through a city, emergency teams do not n
 
 The story of a session is deliberate:
 
-1. **See** — Upload or select a **post-disaster** GeoTIFF. Pre-event imagery is **not required**: the agent can search for an appropriate pre scene (Maxar Open → local Maxar → NAIP → USGS → NOAA, …), align it to the post image, run **ViPDE** damage scoring at scale, and fuse predictions with official footprints.
+1. **See** — Upload or select a **post-disaster** GeoTIFF. Pre-event imagery is **not required**: the agent can search for an appropriate pre scene (Maxar Open → local Maxar → NAIP → USGS → NOAA, …) with acquisition in the **previous calendar month or earlier** (≥1 month gap vs the disaster/post date from the upload form, GeoTIFF tags/filename, or known events such as LA Jan 2025), align it to the post image, run **ViPDE** damage scoring at scale, and fuse predictions with official footprints.
 2. **Verify** — a **Vision-Language Agent** (Visual Verifier) challenges uncertain or inconsistent cases with multimodal chips; reviewers can **Agree** or **Reject**, and those preferences can later steer the Verifier via DPO / LoRA.
 3. **Hold still** — verified results become reusable artifacts (stats, maps, facilities, manifests). Expensive GPU work stays behind a checkpoint.
 4. **Ask** — downstream tools and local LLMs answer multi-turn questions over that frozen evidence. Numbers come from assessment tools; doctrine comes from cited public SOPs; vague prompts get a clarify menu instead of a confident wrong answer.
@@ -84,7 +84,7 @@ GPU-heavy steps run in the assessment job; the chat path is rules-first tool rou
 
 | Stage | What you get |
 |-------|----------------|
-| **Assess** | Start from **post** GeoTIFF (pre optional): auto-find & align pre when missing → ViPDE damage perception → fuse with **Overture** footprints (LARIAC optional) |
+| **Assess** | Start from **post** GeoTIFF (pre optional): auto-find & align pre when missing — only scenes from the **previous calendar month or earlier** (≥1 month gap vs disaster/post date from form, GeoTIFF tags/filename, or known events) → ViPDE damage perception → fuse with **Overture** footprints (LARIAC optional) |
 | **Verify** | Llama Vision review of mismatches / damage; Agree–Reject preferences for optional DPO LoRA |
 | **Orient** | Map with pre/post overlays, damage polygons, region stats; **Weather** (temp wash + humidity labels + wind + 24h timeline) and **Roads** (Caltrans closures + CHP incidents); chat deep-links to hospitals and fire / police / shelters |
 | **Decide** | Tool-grounded Q&A: damage counts, which area first (3×3 impact grid), critical facilities, weather / situation outlook, road conditions, short report |
