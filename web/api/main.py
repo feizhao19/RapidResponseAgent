@@ -125,7 +125,8 @@ def api_aoi_imagery(aoi_id: str, which: str) -> FileResponse:
         raise HTTPException(status_code=400, detail="Imagery type must be 'pre' or 'post'")
     try:
         path = get_imagery_preview(aoi_id, which)  # type: ignore[arg-type]
-        return FileResponse(path, media_type="image/jpeg")
+        media = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+        return FileResponse(path, media_type=media)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FileNotFoundError as exc:
