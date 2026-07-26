@@ -13,10 +13,11 @@ import {
 import L from "leaflet";
 import { buildingChipUrl } from "../api/client";
 import type { Hospital, SituationRoads, SituationWeather } from "../api/client";
-import { damageColor } from "../damageColors";
+import { damageColor, displayDamageLabel } from "../damageColors";
 import { BUILDING_SCOPE_HINTS, BUILDING_SCOPE_LABELS, type BuildingScope } from "../buildingScope";
-import { hospitalRowKey } from "../hospitalUtils";
-import type { MapFocus } from "../mapFocus";
+import { findHospitalForFocus, hospitalRowKey } from "../hospitalUtils";
+import type { MapFocus, PriorityGridCell } from "../mapFocus";
+import { buildPriorityGridCells } from "../priorityGrid";
 import { HospitalMapPopup } from "./HospitalMapPopup";
 import { RotatedImageryOverlay, type ImageryCorners } from "./RotatedImageryOverlay";
 import {
@@ -46,8 +47,17 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function buildingPopupDisplayLabel(props: Record<string, unknown>): string {
+  const display = displayDamageLabel(String(props.damage_label ?? "unknown"));
+  if (display === "no_damage") return "No damage";
+  if (display === "minor") return "Minor";
+  if (display === "major") return "Major";
+  if (display === "destroyed") return "Destroyed";
+  return display;
+}
+
 function buildingPopupHtml(aoiId: string, props: Record<string, unknown>): string {
-  const label = escapeHtml(String(props.damage_label ?? "unknown"));
+  const label = escapeHtml(buildingPopupDisplayLabel(props));
   const bldId = String(props.BLD_ID ?? "");
   const area = props.AREA ? Number(props.AREA).toFixed(0) : "n/a";
   const preUrl = buildingChipUrl(aoiId, bldId, "pre");
@@ -126,6 +136,8 @@ type Props = {
   situationRoads?: SituationRoads | null;
   situationRoadsLoading?: boolean;
   situationRoadsError?: string | null;
+  /** AOI stats (optional) — used to build the Priority 3×3 grid. */
+  aoiStats?: Record<string, unknown> | null;
   /** Cleared focus / chat deep-link after user recenters on the AOI. */
   onRecenter?: () => void;
 };
@@ -252,12 +264,33 @@ function FocusMapTarget({
       return;
     }
 
+    if (focus.kind === "weather") {
+      if (focus.aoiBounds) {
+        const [west, south, east, north] = focus.aoiBounds;
+        map.flyToBounds(
+          [
+            [south, west],
+            [north, east],
+          ],
+          { padding: [40, 40], duration: 0.8, maxZoom: 16 },
+        );
+      }
+      return;
+    }
+
     const [lon, lat] = focus.coordinates_wgs84;
     const targetZoom = Math.max(map.getZoom(), 15);
     map.flyTo([lat, lon], targetZoom, { duration: 0.75 });
     const timer = window.setTimeout(() => {
       if (focus.kind === "hospital") {
-        const marker = markerRefs.current[focus.hospitalKey];
+        const matched = Object.keys(markerRefs.current).find((key) => {
+          if (key === focus.hospitalKey) return true;
+          // Matched AOI hospital row uses name-distance key; try opening that too.
+          return key.startsWith(`${focus.name}-`);
+        });
+        const marker =
+          markerRefs.current[focus.hospitalKey] ??
+          (matched ? markerRefs.current[matched] : undefined);
         const popup = marker?.getPopup();
         if (popup) popup.options.autoPan = false;
         marker?.openPopup();
@@ -305,8 +338,8 @@ function priorityRegionStyle(priority?: number): L.PathOptions {
     return {
       color: "#64748b",
       weight: 2.25,
-      fillColor: "#7a3a34",
-      fillOpacity: 0.42,
+      fillColor: "#4a1c18",
+      fillOpacity: 0.52,
       className: "priority-grid-cell priority-grid-focused",
     };
   }
@@ -314,8 +347,8 @@ function priorityRegionStyle(priority?: number): L.PathOptions {
     return {
       color: "#7c8a9a",
       weight: 1.5,
-      fillColor: "#a56d5f",
-      fillOpacity: 0.34,
+      fillColor: "#8f5246",
+      fillOpacity: 0.38,
       className: "priority-grid-cell",
     };
   }
@@ -343,12 +376,13 @@ function rgbToHex(r: number, g: number, b: number): string {
 /**
  * Low-chroma sequential ramp (low → high Score).
  * Stays in one warm family so the 3×3 reads as one layer, not a rainbow.
+ * High end is deepened so top-priority cells read clearly against imagery.
  */
 const SEVERITY_RAMP: Array<{ t: number; hex: string }> = [
   { t: 0, hex: "#c5ced9" },
   { t: 0.35, hex: "#b9a094" },
-  { t: 0.65, hex: "#a56d5f" },
-  { t: 1, hex: "#7a3a34" },
+  { t: 0.65, hex: "#8f5246" },
+  { t: 1, hex: "#4a1c18" },
 ];
 
 function lerpSeverityColor(t: number): string {
@@ -399,18 +433,155 @@ function gridCellStyle(
     minor: number;
     priority?: number;
   },
-  options: { maxImpact: number; focused: boolean },
+  options: { maxImpact: number; focused: boolean; hovered?: boolean },
 ): L.PathOptions {
-  const { maxImpact, focused } = options;
+  const { maxImpact, focused, hovered = false } = options;
   const t = cellRelativeSeverity(cell, maxImpact);
   const fillColor = lerpSeverityColor(t);
+  const highlight = focused || hovered;
   return {
-    color: focused ? "#334155" : "#7c8a9a",
-    weight: focused ? 2.4 : 1.15,
+    color: highlight ? "#334155" : "#7c8a9a",
+    weight: focused ? 2.4 : hovered ? 2.15 : 1.15,
     fillColor,
-    fillOpacity: focused ? 0.48 : 0.26 + t * 0.28,
-    className: focused ? "priority-grid-cell priority-grid-focused" : "priority-grid-cell",
+    fillOpacity: focused ? 0.56 : hovered ? Math.min(0.62, 0.34 + t * 0.34) : 0.28 + t * 0.34,
+    className: focused
+      ? "priority-grid-cell priority-grid-focused"
+      : hovered
+        ? "priority-grid-cell priority-grid-hovered"
+        : "priority-grid-cell",
   };
+}
+
+function PriorityLayerControl({
+  enabled,
+  onToggle,
+  disabled,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+}) {
+  const map = useMap();
+  const onToggleRef = useRef(onToggle);
+  onToggleRef.current = onToggle;
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+
+  useEffect(() => {
+    const control = new L.Control({ position: "topleft" });
+    control.onAdd = () => {
+      const container = L.DomUtil.create("div", "leaflet-priority-layer-control");
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      const button = L.DomUtil.create("button", "", container);
+      button.type = "button";
+      button.textContent = "Priority";
+      button.title = "Show or hide mission-priority 3×3 damage grid";
+      button.addEventListener("click", () => {
+        if (!disabledRef.current) onToggleRef.current();
+      });
+      return container;
+    };
+    control.addTo(map);
+    return () => {
+      control.remove();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const button = map
+      .getContainer()
+      .querySelector(".leaflet-priority-layer-control button") as HTMLButtonElement | null;
+    if (!button) return;
+    button.classList.toggle("active", enabled);
+    button.disabled = Boolean(disabled);
+    button.textContent = enabled ? "Priority" : "Priority off";
+    button.title = enabled
+      ? "Hide mission-priority 3×3 damage grid"
+      : "Show mission-priority 3×3 damage grid";
+  }, [enabled, disabled, map]);
+
+  return null;
+}
+
+function PriorityGridOverlay({
+  cells,
+  focus,
+}: {
+  cells: PriorityGridCell[];
+  focus?: {
+    priority?: number;
+    direction?: string;
+    bounds_wgs84?: [number, number, number, number];
+    name?: string;
+  } | null;
+}) {
+  const maxImpact = Math.max(1, ...cells.map((item) => cellScore(item)));
+  return (
+    <>
+      {cells.map((cell) => {
+        const focused = Boolean(
+          focus &&
+            ((focus.priority != null && cell.priority === focus.priority) ||
+              (focus.direction != null &&
+                cell.direction.toUpperCase() === focus.direction.toUpperCase()) ||
+              (focus.bounds_wgs84 &&
+                cell.bounds_wgs84[0] === focus.bounds_wgs84[0] &&
+                cell.bounds_wgs84[1] === focus.bounds_wgs84[1] &&
+                cell.bounds_wgs84[2] === focus.bounds_wgs84[2] &&
+                cell.bounds_wgs84[3] === focus.bounds_wgs84[3])),
+        );
+        const baseStyle = gridCellStyle(cell, { maxImpact, focused });
+        return (
+          <Rectangle
+            key={`priority-grid-${cell.direction}`}
+            bounds={[
+              [cell.bounds_wgs84[1], cell.bounds_wgs84[0]],
+              [cell.bounds_wgs84[3], cell.bounds_wgs84[2]],
+            ]}
+            pathOptions={baseStyle}
+            eventHandlers={{
+              mouseover: (event) => {
+                const layer = event.target as L.Path;
+                layer.setStyle(gridCellStyle(cell, { maxImpact, focused, hovered: true }));
+                layer.bringToFront();
+              },
+              mouseout: (event) => {
+                const layer = event.target as L.Path;
+                layer.setStyle(baseStyle);
+              },
+            }}
+          >
+            <Tooltip
+              permanent
+              direction="center"
+              className={
+                focused
+                  ? "priority-region-tooltip priority-region-tooltip-focus"
+                  : "priority-region-tooltip"
+              }
+            >
+              <div className="priority-cell-label">
+                <div className="priority-cell-label-head">
+                  {focused && focus?.name
+                    ? focus.name
+                    : cell.priority
+                      ? `P${cell.priority} · ${directionShortLabel(cell.direction) || cell.direction}`
+                      : directionShortLabel(cell.direction) || cell.direction}
+                </div>
+                <div className="priority-cell-label-score">Score {cell.impact_score}</div>
+                <div className="priority-cell-label-stats">
+                  <span>D {cell.destroyed}</span>
+                  <span>Ma {cell.major}</span>
+                  <span>Mi {cell.minor}</span>
+                </div>
+              </div>
+            </Tooltip>
+          </Rectangle>
+        );
+      })}
+    </>
+  );
 }
 
 function directionShortLabel(direction: string): string {
@@ -533,12 +704,47 @@ const hospitalIcon = L.divIcon({
   iconAnchor: [6, 6],
 });
 
+const fireStationIcon = L.divIcon({
+  className: "",
+  html: '<div style="background:#ea580c;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 0 1px #9a3412"></div>',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+});
+
+const policeIcon = L.divIcon({
+  className: "",
+  html: '<div style="background:#2563eb;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 0 1px #1e40af"></div>',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+});
+
+const shelterIcon = L.divIcon({
+  className: "",
+  html: '<div style="background:#059669;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 0 1px #065f46"></div>',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+});
+
 const facilityFocusIcon = L.divIcon({
   className: "",
   html: '<div style="background:#2563eb;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 0 1px #1e40af"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });
+
+function facilityMarkerIcon(kind?: string) {
+  switch (kind) {
+    case "fire_station":
+      return fireStationIcon;
+    case "police":
+      return policeIcon;
+    case "shelter":
+      return shelterIcon;
+    case "hospital":
+    default:
+      return hospitalIcon;
+  }
+}
 
 export function MapPanel({
   aoiId,
@@ -559,6 +765,7 @@ export function MapPanel({
   situationRoads = null,
   situationRoadsLoading = false,
   situationRoadsError = null,
+  aoiStats = null,
   onRecenter,
 }: Props) {
   const markerRefs = useRef<Record<string, L.Marker>>({});
@@ -567,10 +774,21 @@ export function MapPanel({
   const [regionSelectEnabled, setRegionSelectEnabled] = useState(false);
   const [regionSelection, setRegionSelection] = useState<RegionSelection | null>(null);
   const [showBuildingPolygons, setShowBuildingPolygons] = useState(true);
+  const [priorityVisible, setPriorityVisible] = useState(false);
   const [situationVisible, setSituationVisible] = useState(false);
   const [roadsVisible, setRoadsVisible] = useState(false);
   const [hourIndex, setHourIndex] = useState(0);
   const [recenterRequestKey, setRecenterRequestKey] = useState(0);
+
+  const priorityCells = useMemo(
+    () =>
+      buildPriorityGridCells({
+        stats: aoiStats,
+        bounds,
+        buildingsGeojson,
+      }),
+    [aoiStats, bounds, buildingsGeojson],
+  );
 
   const handleRecenter = useCallback(() => {
     if (!bounds) return;
@@ -586,11 +804,36 @@ export function MapPanel({
   }, []);
 
   const toggleBuildingPolygons = useCallback(() => {
-    setShowBuildingPolygons((current) => !current);
+    setShowBuildingPolygons((current) => {
+      const next = !current;
+      if (next) {
+        setPriorityVisible(false);
+        setSituationVisible(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const togglePriority = useCallback(() => {
+    setPriorityVisible((current) => {
+      const next = !current;
+      if (next) {
+        setShowBuildingPolygons(false);
+        setSituationVisible(false);
+      }
+      return next;
+    });
   }, []);
 
   const toggleSituation = useCallback(() => {
-    setSituationVisible((current) => !current);
+    setSituationVisible((current) => {
+      const next = !current;
+      if (next) {
+        setShowBuildingPolygons(false);
+        setPriorityVisible(false);
+      }
+      return next;
+    });
   }, []);
 
   const toggleRoads = useCallback(() => {
@@ -609,6 +852,7 @@ export function MapPanel({
     setRegionSelectEnabled(false);
     setRegionSelection(null);
     setShowBuildingPolygons(true);
+    setPriorityVisible(false);
     setSituationVisible(false);
     setRoadsVisible(false);
     setHourIndex(0);
@@ -621,6 +865,16 @@ export function MapPanel({
   useEffect(() => {
     if (focusMap?.kind === "road") {
       setRoadsVisible(true);
+    }
+    if (focusMap?.kind === "region") {
+      setPriorityVisible(true);
+      setShowBuildingPolygons(false);
+      setSituationVisible(false);
+    }
+    if (focusMap?.kind === "weather") {
+      setSituationVisible(true);
+      setShowBuildingPolygons(false);
+      setPriorityVisible(false);
     }
   }, [focusMap]);
   const basemapOptions = useMemo<BasemapOption[]>(
@@ -706,6 +960,11 @@ export function MapPanel({
             visible={showBuildingPolygons}
             onToggle={toggleBuildingPolygons}
             disabled={!buildingsGeojson}
+          />
+          <PriorityLayerControl
+            enabled={priorityVisible}
+            onToggle={togglePriority}
+            disabled={!priorityCells}
           />
           <SituationLayerControl
             enabled={situationVisible}
@@ -806,9 +1065,9 @@ export function MapPanel({
             const rowKey = hospitalRowKey(hospital);
             return (
               <Marker
-                key={rowKey}
+                key={`${hospital.kind || "facility"}-${rowKey}`}
                 position={[coords[1], coords[0]]}
-                icon={hospitalIcon}
+                icon={facilityMarkerIcon(hospital.kind)}
                 ref={(marker) => {
                   if (marker) {
                     markerRefs.current[rowKey] = marker;
@@ -817,22 +1076,18 @@ export function MapPanel({
                   }
                 }}
               >
-                <Popup minWidth={240} maxWidth={320}>
+                <Popup minWidth={260} maxWidth={340}>
                   <HospitalMapPopup hospital={hospital} />
                 </Popup>
               </Marker>
             );
           })}
           {focusMap?.kind === "hospital" &&
-            !hospitals.some((h) => hospitalRowKey(h) === focusMap.hospitalKey) && (
+            !findHospitalForFocus(hospitals, focusMap) && (
               <Marker
                 key={`chat-focus-${focusMap.key}`}
                 position={[focusMap.coordinates_wgs84[1], focusMap.coordinates_wgs84[0]]}
-                icon={
-                  focusMap.facilityKind && focusMap.facilityKind !== "hospital"
-                    ? facilityFocusIcon
-                    : hospitalIcon
-                }
+                icon={facilityMarkerIcon(focusMap.facilityKind)}
                 ref={(marker) => {
                   if (marker) {
                     markerRefs.current[focusMap.hospitalKey] = marker;
@@ -841,24 +1096,28 @@ export function MapPanel({
                   }
                 }}
               >
-                <Popup minWidth={220} maxWidth={300}>
-                  <div className="hospital-popup">
-                    <div className="hospital-popup-title">{focusMap.name}</div>
-                    <dl className="hospital-popup-details">
-                      {focusMap.facilityKind && focusMap.facilityKind !== "hospital" && (
-                        <>
-                          <dt>Type</dt>
-                          <dd>{String(focusMap.facilityKind).replace(/_/g, " ")}</dd>
-                        </>
-                      )}
-                      {focusMap.distance_mi && (
-                        <>
-                          <dt>Distance</dt>
-                          <dd>{focusMap.distance_mi} mi from AOI centroid</dd>
-                        </>
-                      )}
-                    </dl>
-                  </div>
+                <Popup minWidth={260} maxWidth={340}>
+                  <HospitalMapPopup
+                    hospital={{
+                      name: focusMap.name,
+                      coordinates_wgs84: focusMap.coordinates_wgs84,
+                      distance_mi: focusMap.distance_mi
+                        ? Number(focusMap.distance_mi)
+                        : undefined,
+                      phone: focusMap.phone,
+                      email: focusMap.email,
+                      website: focusMap.website,
+                      operator: focusMap.operator,
+                      contact_name: focusMap.contact_name,
+                      emergency: focusMap.emergency,
+                      beds: focusMap.beds,
+                      opening_hours: focusMap.opening_hours,
+                      address: focusMap.address,
+                      osm_type: focusMap.osm_type,
+                      osm_id: focusMap.osm_id,
+                      kind: focusMap.facilityKind,
+                    }}
+                  />
                 </Popup>
               </Marker>
             )}
@@ -897,76 +1156,48 @@ export function MapPanel({
               </Popup>
             </Marker>
           )}
-          {focusMap?.kind === "region" &&
-            (focusMap.cells && focusMap.cells.length > 0 ? (
-              <>
-                {(() => {
-                  const maxImpact = Math.max(
-                    1,
-                    ...focusMap.cells.map((item) => cellScore(item)),
+          {priorityVisible &&
+            (() => {
+              const cells =
+                (focusMap?.kind === "region" && focusMap.cells && focusMap.cells.length > 0
+                  ? focusMap.cells
+                  : priorityCells) ?? null;
+              if (!cells || cells.length === 0) {
+                if (focusMap?.kind === "region") {
+                  return (
+                    <Rectangle
+                      key={`chat-region-focus-${focusMap.key}`}
+                      bounds={[
+                        [focusMap.bounds_wgs84[1], focusMap.bounds_wgs84[0]],
+                        [focusMap.bounds_wgs84[3], focusMap.bounds_wgs84[2]],
+                      ]}
+                      pathOptions={priorityRegionStyle(focusMap.priority)}
+                    >
+                      <Tooltip permanent direction="center" className="priority-region-tooltip">
+                        <div className="priority-cell-label">{focusMap.name}</div>
+                      </Tooltip>
+                    </Rectangle>
                   );
-                  return focusMap.cells.map((cell) => {
-                    const focused =
-                      (focusMap.priority != null && cell.priority === focusMap.priority) ||
-                      (focusMap.direction != null &&
-                        cell.direction.toUpperCase() === focusMap.direction.toUpperCase()) ||
-                      (cell.bounds_wgs84[0] === focusMap.bounds_wgs84[0] &&
-                        cell.bounds_wgs84[1] === focusMap.bounds_wgs84[1] &&
-                        cell.bounds_wgs84[2] === focusMap.bounds_wgs84[2] &&
-                        cell.bounds_wgs84[3] === focusMap.bounds_wgs84[3]);
-                    return (
-                      <Rectangle
-                        key={`grid-${focusMap.key}-${cell.direction}`}
-                        bounds={[
-                          [cell.bounds_wgs84[1], cell.bounds_wgs84[0]],
-                          [cell.bounds_wgs84[3], cell.bounds_wgs84[2]],
-                        ]}
-                        pathOptions={gridCellStyle(cell, { maxImpact, focused })}
-                      >
-                        <Tooltip
-                          permanent
-                          direction="center"
-                          className={
-                            focused
-                              ? "priority-region-tooltip priority-region-tooltip-focus"
-                              : "priority-region-tooltip"
-                          }
-                        >
-                          <div className="priority-cell-label">
-                            <div className="priority-cell-label-head">
-                              {cell.priority
-                                ? `P${cell.priority} · ${directionShortLabel(cell.direction) || cell.direction}`
-                                : directionShortLabel(cell.direction) || cell.direction}
-                            </div>
-                            <div className="priority-cell-label-score">
-                              Score {cell.impact_score}
-                            </div>
-                            <div className="priority-cell-label-stats">
-                              <span>D {cell.destroyed}</span>
-                              <span>Ma {cell.major}</span>
-                              <span>Mi {cell.minor}</span>
-                            </div>
-                          </div>
-                        </Tooltip>
-                      </Rectangle>
-                    );
-                  });
-                })()}
-              </>
-            ) : (
-              <Rectangle
-                key={`chat-region-focus-${focusMap.key}`}
-                bounds={[
-                  [focusMap.bounds_wgs84[1], focusMap.bounds_wgs84[0]],
-                  [focusMap.bounds_wgs84[3], focusMap.bounds_wgs84[2]],
-                ]}
-                pathOptions={priorityRegionStyle(focusMap.priority)}
-              >
-                <Tooltip permanent direction="center" className="priority-region-tooltip">
-                  {focusMap.name}
-                </Tooltip>
-              </Rectangle>
-            ))}
+                }
+                return null;
+              }
+              return (
+                <PriorityGridOverlay
+                  key={`priority-overlay-${focusMap?.kind === "region" ? focusMap.key : "layer"}`}
+                  cells={cells}
+                  focus={
+                    focusMap?.kind === "region"
+                      ? {
+                          priority: focusMap.priority,
+                          direction: focusMap.direction,
+                          bounds_wgs84: focusMap.bounds_wgs84,
+                          name: focusMap.name,
+                        }
+                      : null
+                  }
+                />
+              );
+            })()}
         </MapContainer>
         {situationWeather && (
           <SituationOverlay
@@ -994,7 +1225,6 @@ export function MapPanel({
       <div className="legend">
         {[
           ["no_damage", "No damage"],
-          ["no_damage_inferred", "Inferred OK"],
           ["minor", "Minor"],
           ["major", "Major"],
           ["destroyed", "Destroyed"],

@@ -1,4 +1,5 @@
 import type { AssessmentJob, ChatMessage } from "./api/client";
+import { isAssessmentCompletionContent } from "./assessmentJobMessage";
 
 export type ChatSession = {
   id: string;
@@ -142,7 +143,7 @@ export function mergeSessionFromServer(
 
   const progressId = `assessment-progress-${session.id}`;
   const hasServerCompletion = serverMessages.some((message) =>
-    message.content.includes("**Assessment completed**"),
+    isAssessmentCompletionContent(message.content),
   );
   const localOnly = session.messages.filter((message) => {
     if (serverMessages.some((serverMessage) => serverMessage.id === message.id)) {

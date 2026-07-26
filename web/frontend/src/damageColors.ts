@@ -5,22 +5,29 @@
  * Level 2 Minor:      rgb(1, 191, 134) -> #01BF86
  * Level 3 Major:      rgb(1, 191, 254) -> #01BFFE
  * Level 4 Destroyed:  rgb(251, 12, 4)  -> #FB0C04
+ *
+ * Map display folds `no_damage_inferred` into `no_damage` (same color/label).
+ * Pipeline data still keeps assignment_status / no_damage_inferred internally.
  */
 export const VIPDE_DAMAGE_COLORS = {
   no_damage: "#00FF00",
-  no_damage_inferred: "#80FF80",
   minor: "#01BF86",
   major: "#01BFFE",
   destroyed: "#FB0C04",
   unknown: "#94a3b8",
 } as const;
 
+/** Map / legend taxonomy: four display classes only. */
+export function displayDamageLabel(label: string | null | undefined): string {
+  const raw = String(label ?? "unknown");
+  if (raw === "no_damage_inferred") return "no_damage";
+  return raw;
+}
+
 export function damageColor(label: string): string {
-  switch (label) {
+  switch (displayDamageLabel(label)) {
     case "no_damage":
       return VIPDE_DAMAGE_COLORS.no_damage;
-    case "no_damage_inferred":
-      return VIPDE_DAMAGE_COLORS.no_damage_inferred;
     case "minor":
       return VIPDE_DAMAGE_COLORS.minor;
     case "major":

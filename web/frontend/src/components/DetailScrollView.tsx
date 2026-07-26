@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { HospitalsPanel } from "./HospitalsPanel";
+import { FacilitiesPanel } from "./HospitalsPanel";
 import { MapPanel, type BasemapId } from "./MapPanel";
 import { ReportPanel } from "./ReportPanel";
 import { StatsPanel } from "./StatsPanel";
@@ -13,19 +13,19 @@ import {
   hasVlmReviewedView,
   type BuildingScope,
 } from "../buildingScope";
-import { hospitalRowKey, resolveHospitalCoords } from "../hospitalUtils";
+import { findHospitalForFocus, hospitalRowKey, mergeFacilityDetails, resolveHospitalCoords } from "../hospitalUtils";
 import type { MapFocus } from "../mapFocus";
 import type { BuildingScopeStats } from "../buildingScope";
 import { featureCentroidWgs84, findBuildingFeatureById } from "../regionStats";
 import type { ImageryCorners } from "./RotatedImageryOverlay";
 
-export type SectionId = "map" | "stats" | "vlm" | "report" | "hospitals";
+export type SectionId = "map" | "stats" | "vlm" | "report" | "facilities";
 
 const BASE_SECTIONS: { id: SectionId; label: string }[] = [
   { id: "map", label: "Map" },
   { id: "stats", label: "Stats" },
   { id: "report", label: "Report" },
-  { id: "hospitals", label: "Hospitals" },
+  { id: "facilities", label: "Facilities" },
 ];
 
 const VLM_SECTION = { id: "vlm" as const, label: "VLM reasoning" };
@@ -155,7 +155,7 @@ export function DetailScrollView({
     stats: null,
     vlm: null,
     report: null,
-    hospitals: null,
+    facilities: null,
   });
   const [activeSection, setActiveSection] = useState<SectionId>("map");
   const [buildingScope, setBuildingScope] = useState<BuildingScope>("official");
@@ -344,9 +344,58 @@ export function DetailScrollView({
 
   useEffect(() => {
     if (!externalMapFocus) return;
+    if (externalMapFocus.kind === "hospital") {
+      const matched = findHospitalForFocus(hospitals, externalMapFocus);
+      if (matched) {
+        const enriched = mergeFacilityDetails(
+          {
+            name: externalMapFocus.name,
+            coordinates_wgs84: externalMapFocus.coordinates_wgs84,
+            distance_mi: externalMapFocus.distance_mi
+              ? Number(externalMapFocus.distance_mi)
+              : undefined,
+            phone: externalMapFocus.phone,
+            email: externalMapFocus.email,
+            website: externalMapFocus.website,
+            operator: externalMapFocus.operator,
+            contact_name: externalMapFocus.contact_name,
+            emergency: externalMapFocus.emergency,
+            beds: externalMapFocus.beds,
+            opening_hours: externalMapFocus.opening_hours,
+            address: externalMapFocus.address,
+            osm_type: externalMapFocus.osm_type,
+            osm_id: externalMapFocus.osm_id,
+            kind: externalMapFocus.facilityKind,
+          },
+          matched,
+        );
+        setMapFocus({
+          ...externalMapFocus,
+          hospitalKey: hospitalRowKey(matched),
+          facilityKind: enriched.kind || externalMapFocus.facilityKind,
+          phone: enriched.phone,
+          email: enriched.email,
+          website: enriched.website,
+          operator: enriched.operator,
+          contact_name: enriched.contact_name,
+          emergency: enriched.emergency != null ? String(enriched.emergency) : undefined,
+          beds: enriched.beds != null ? String(enriched.beds) : undefined,
+          opening_hours: enriched.opening_hours,
+          address: enriched.address ?? undefined,
+          osm_type: enriched.osm_type,
+          osm_id: enriched.osm_id != null ? String(enriched.osm_id) : undefined,
+          distance_mi:
+            enriched.distance_mi != null
+              ? String(enriched.distance_mi)
+              : externalMapFocus.distance_mi,
+        });
+        scrollToSection("map");
+        return;
+      }
+    }
     setMapFocus(externalMapFocus);
     scrollToSection("map");
-  }, [externalMapFocus]);
+  }, [externalMapFocus, hospitals]);
 
   const handleMapRecenter = useCallback(() => {
     setMapFocus(null);
@@ -465,6 +514,7 @@ export function DetailScrollView({
             situationRoads={situationRoads}
             situationRoadsLoading={situationRoadsLoading}
             situationRoadsError={situationRoadsError}
+            aoiStats={(detail?.stats as Record<string, unknown> | undefined) ?? null}
           />
         </DetailSection>
 
@@ -513,8 +563,8 @@ export function DetailScrollView({
           />
         </DetailSection>
 
-        <DetailSection id="hospitals" title="Nearest Hospitals" sectionRef={setSectionRef("hospitals")}>
-          <HospitalsPanel detail={detail} onShowOnMap={showHospitalOnMap} />
+        <DetailSection id="facilities" title="Facilities" sectionRef={setSectionRef("facilities")}>
+          <FacilitiesPanel detail={detail} onShowOnMap={showHospitalOnMap} />
         </DetailSection>
       </div>
     </section>

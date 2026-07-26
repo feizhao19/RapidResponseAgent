@@ -44,6 +44,7 @@ import { formatAssessedCaseLabel } from "./caseLabel";
 import { ChatPanel } from "./components/ChatPanel";
 import { DetailScrollView } from "./components/DetailScrollView";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
+import { namedFacilitiesOnly } from "./hospitalUtils";
 import type { MapFocus } from "./mapFocus";
 import { toMapFocus, type ChatMapDeepLink } from "./mapDeepLink";
 
@@ -73,6 +74,17 @@ function initialSessionsState(): { sessions: ChatSession[]; activeSessionId: str
 }
 
 const LLM_MODEL_STORAGE_KEY = "geoagent.chat.llmModel";
+
+/** Chat tools that rewrite AOI artifacts the right-hand panels read. */
+const DETAIL_REFRESH_TOOLS = new Set([
+  "find_nearest_facilities",
+  "find_nearest_hospitals",
+  "get_mission_priority",
+  "situation_roads",
+  "situation_weather",
+  "get_aoi_stats",
+  "get_damage_summary",
+]);
 
 function readStoredLlmModel(): LlmModelId {
   try {
@@ -266,10 +278,14 @@ export default function App() {
     askAbortRef.current?.abort();
     askAbortRef.current = null;
     setLoadingSessionId(null);
+    setError(null);
     setConversation((prev) => {
       const remaining = prev.sessions.filter((session) => session.id !== sessionId);
       if (remaining.length === 0) {
         const session = createChatSession();
+        void createServerSession({ sessionId: session.id, title: session.title }).catch(
+          (err: Error) => setError(err.message),
+        );
         return { sessions: [session], activeSessionId: session.id };
       }
       const activeSessionId =
@@ -370,6 +386,22 @@ export default function App() {
           activity: activity.length ? activity : undefined,
         }),
       );
+
+      // Chat tools may have rewritten nearest_facilities / roads / stats on disk —
+      // refresh the Facilities panel (and map markers) for the active AOI.
+      const tools = response.tools_called ?? [];
+      const aoiToRefresh = response.active_aoi_id || selectedAoiId;
+      if (aoiToRefresh && tools.some((tool) => DETAIL_REFRESH_TOOLS.has(tool))) {
+        if (aoiToRefresh !== selectedAoiId) {
+          setSelectedAoiId(aoiToRefresh);
+        }
+        try {
+          const next = await getAoiDetail(aoiToRefresh);
+          setDetail(next);
+        } catch {
+          // Detail refresh is best-effort; the chat answer already succeeded.
+        }
+      }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         activity = finalizeActivity(activity);
@@ -666,6 +698,9 @@ export default function App() {
   }
 
   const hospitals = (detail?.hospitals?.hospitals ?? []) as Hospital[];
+  const mapFacilities = namedFacilitiesOnly(
+    (detail?.facilities && detail.facilities.length > 0 ? detail.facilities : hospitals) as Hospital[],
+  );
 
   return (
     <div className="app-shell">
@@ -721,7 +756,7 @@ export default function App() {
                 detectedExtraCount={selectedRecord?.summary?.buildings_detected}
                 detailLoading={!detail || detail.aoi_id !== selectedAoiId}
                 mapCenter={mapCenter}
-                hospitals={hospitals}
+                hospitals={mapFacilities}
                 externalMapFocus={chatMapFocus}
                 onClearExternalMapFocus={() => setChatMapFocus(null)}
                 onRunVlm={handleRunVlm}

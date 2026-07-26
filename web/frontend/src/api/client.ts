@@ -30,7 +30,11 @@ export type AoiRecord = {
 export type AoiDetail = AoiRecord & {
   stats?: Record<string, unknown>;
   location?: Record<string, unknown>;
-  hospitals?: { hospitals?: Hospital[]; nearest?: Hospital };
+  /** Flattened hospital / fire / police / shelter records for map + Facilities panel. */
+  facilities?: Hospital[];
+  /** Combined Overpass payload when nearest_facilities_all.json exists. */
+  facilities_payload?: Record<string, unknown>;
+  hospitals?: { hospitals?: Hospital[]; nearest?: Hospital; status?: string; lookup_error?: string; aoi_centroid_wgs84?: [number, number]; search_radius_km?: number };
   report_markdown?: string;
   report_markdown_official?: string;
   report_markdown_fused?: string;
@@ -132,15 +136,23 @@ export type VlmDamageReviewSummary = {
 
 export type Hospital = {
   name: string;
+  kind?: string;
   distance_km?: number;
   distance_mi?: number;
   phone?: string;
+  email?: string;
   website?: string;
   operator?: string;
+  contact_name?: string;
+  emergency?: string;
+  beds?: string | number;
+  opening_hours?: string;
   address?: string | null;
   coordinates_wgs84?: [number, number];
   latitude?: number;
   longitude?: number;
+  osm_type?: string;
+  osm_id?: number | string;
 };
 
 export type ChatTurn = {

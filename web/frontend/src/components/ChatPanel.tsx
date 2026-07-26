@@ -8,6 +8,8 @@ import type { ChatSession } from "../chatSessions";
 import { formatAssessedCaseLabel } from "../caseLabel";
 import { parseChatMapDeepLink, type ChatMapDeepLink } from "../mapDeepLink";
 import { ActivityTimeline } from "./ActivityTimeline";
+import { AssessmentProgressCard } from "./AssessmentProgressCard";
+import { parseAssessmentProgress } from "../assessmentJobMessage";
 
 const SIDEBAR_COLLAPSED_KEY = "geoagent.chat.sidebarCollapsed";
 
@@ -261,17 +263,19 @@ export function ChatPanel({
                   <span className="chat-session-title">{session.title}</span>
                   <span className="chat-session-meta">{preview}</span>
                 </button>
-                {sessions.length > 1 && (
-                  <button
-                    type="button"
-                    className="chat-session-delete"
-                    aria-label={`Delete ${session.title}`}
-                    title="Delete conversation"
-                    onClick={() => onDeleteSession(session.id)}
-                  >
-                    ×
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="chat-session-delete"
+                  aria-label={`Delete ${session.title}`}
+                  title={
+                    sessions.length === 1
+                      ? "Delete and start a new conversation"
+                      : "Delete conversation"
+                  }
+                  onClick={() => onDeleteSession(session.id)}
+                >
+                  ×
+                </button>
               </div>
             );
           })}
@@ -345,9 +349,8 @@ export function ChatPanel({
         <div className="chat-history" ref={chatHistoryRef}>
           {messages.length === 0 && (
             <div className="message assistant">
-              Attach a post-disaster GeoTIFF below and Send to run a new assessment (one image area
-              = one past assessment), or select a past assessment and ask about that AOI — damage
-              stats, hospitals, weather, or a short report.
+              Start a new assessment: attach a post-disaster GeoTIFF below, then Send.
+              Continue with a past assessment: select one above, then ask about that AOI.
             </div>
           )}
           {messages.map((message) => {
@@ -355,19 +358,66 @@ export function ChatPanel({
             const hasActivity = Boolean(message.activity?.length);
             const showThinking =
               loading && isStreaming && !message.content && !hasActivity;
+            const assessment = parseAssessmentProgress(message.content);
+            const hideMeta =
+              Boolean(assessment) ||
+              message.meta === "Assessment" ||
+              message.meta === "new_assessment";
             return (
             <div
               key={message.id}
               className={`message ${message.role} ${
                 message.meta === "Assessment" && uploadBusy ? "message-live" : ""
-              } ${isStreaming ? "message-streaming" : ""}`}
+              } ${isStreaming ? "message-streaming" : ""} ${
+                assessment ? "message-assessment" : ""
+              }`}
             >
-              {message.meta && <div className="message-meta">{message.meta}</div>}
+              {message.meta && !hideMeta && <div className="message-meta">{message.meta}</div>}
               {message.role === "assistant" ? (
                 <>
                   {hasActivity && (
                     <ActivityTimeline items={message.activity!} live={isStreaming} />
                   )}
+                  {assessment ? (
+                    <>
+                      <AssessmentProgressCard view={assessment.view} />
+                      {assessment.reportMarkdown && (
+                        <div className="chat-md assessment-progress-report">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              a: ({ href, children }) => {
+                                const mapLink = parseChatMapDeepLink(href);
+                                if (mapLink && onHospitalMapLink) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      className="chat-map-link"
+                                      title="Show on map"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        onHospitalMapLink(mapLink);
+                                      }}
+                                    >
+                                      {children}
+                                    </button>
+                                  );
+                                }
+                                return (
+                                  <a href={href} target="_blank" rel="noreferrer">
+                                    {children}
+                                  </a>
+                                );
+                              },
+                            }}
+                          >
+                            {assessment.reportMarkdown}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+                    </>
+                  ) : (
                   <div className="chat-md">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
@@ -401,6 +451,7 @@ export function ChatPanel({
                       {message.content || (showThinking ? "_Thinking…_" : "")}
                     </ReactMarkdown>
                   </div>
+                  )}
                 </>
               ) : (
                 <div>{message.content}</div>
@@ -497,7 +548,7 @@ export function ChatPanel({
               <span>
                 Look up nearby facilities during assessment
                 <span className="chat-action-panel-hint" style={{ display: "block" }}>
-                  Hospitals, fire stations, police, and shelters (OpenStreetMap)
+                  Hospitals, fire stations, police, and shelters
                 </span>
               </span>
             </label>
