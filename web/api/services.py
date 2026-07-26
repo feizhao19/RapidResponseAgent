@@ -116,6 +116,23 @@ def get_aoi_detail(aoi_id: str) -> dict[str, Any]:
         if path.is_file():
             detail[name] = _read_json(path)
 
+    if isinstance(detail.get("hospitals"), dict):
+        try:
+            from geoagent.tools.nearest_facilities import facilities_payload_for_display
+
+            detail["hospitals"] = facilities_payload_for_display(detail["hospitals"])
+        except Exception:
+            pass
+
+    try:
+        from geoagent.tools.nearest_facilities import load_facilities_for_map
+
+        facilities = load_facilities_for_map(aligned_dir)
+        if facilities:
+            detail["facilities"] = facilities
+    except Exception:
+        pass
+
     buildings_path = aligned_dir / "buildings_out" / BUILDINGS_FILENAME
     if detail.get("stats") and buildings_path.is_file():
         try:
@@ -272,6 +289,82 @@ def imagery_corners_from_meta(meta: dict[str, Any]) -> dict[str, list[float]] | 
     }
 
 
+def _border_connected_empty_mask(intensity: np.ndarray, *, empty_max: int = 0) -> np.ndarray:
+    """True for empty pixels connected to the image border (align pad / warp nodata).
+
+    Interior dark roofs stay opaque because they are not border-connected through empty pixels.
+    """
+    from collections import deque
+
+    h, w = intensity.shape
+    empty = intensity <= empty_max
+    visited = np.zeros((h, w), dtype=bool)
+    queue: deque[tuple[int, int]] = deque()
+
+    def _seed(r: int, c: int) -> None:
+        if empty[r, c] and not visited[r, c]:
+            visited[r, c] = True
+            queue.append((r, c))
+
+    for r in range(h):
+        _seed(r, 0)
+        _seed(r, w - 1)
+    for c in range(w):
+        _seed(0, c)
+        _seed(h - 1, c)
+
+    while queue:
+        r, c = queue.popleft()
+        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < h and 0 <= nc < w and empty[nr, nc] and not visited[nr, nc]:
+                visited[nr, nc] = True
+                queue.append((nr, nc))
+    return visited
+
+
+def _preview_alpha_from_rgb(
+    rgb: np.ndarray,
+    *,
+    fringe_max: int = 16,
+    fringe_dilate: int = 3,
+    feather_px: int = 2,
+) -> np.ndarray:
+    """Build an alpha mask that punches align black borders; keeps interior dark pixels."""
+    # rgb: (3, H, W) uint8
+    intensity = np.max(rgb, axis=0)
+    nodata = _border_connected_empty_mask(intensity, empty_max=0)
+    # Absorb bilinear/warp near-black fringe growing outward from true nodata only.
+    for _ in range(max(0, fringe_dilate)):
+        padded = np.pad(nodata, 1, constant_values=False)
+        near = (
+            padded[:-2, 1:-1]
+            | padded[2:, 1:-1]
+            | padded[1:-1, :-2]
+            | padded[1:-1, 2:]
+        )
+        nodata = nodata | (near & (intensity <= fringe_max))
+
+    alpha = np.where(nodata, 0, 255).astype(np.uint8)
+    # Soft edge so the basemap blend is less harsh.
+    for _ in range(max(0, feather_px)):
+        padded = np.pad(alpha, 1, mode="edge")
+        neigh_min = np.minimum.reduce(
+            [
+                padded[:-2, 1:-1],
+                padded[2:, 1:-1],
+                padded[1:-1, :-2],
+                padded[1:-1, 2:],
+            ]
+        )
+        edge = (alpha == 255) & (neigh_min < 255)
+        if not edge.any():
+            break
+        alpha = alpha.copy()
+        alpha[edge] = ((alpha[edge].astype(np.int16) + neigh_min[edge]) // 2).astype(np.uint8)
+    return alpha
+
+
 def get_imagery_preview(aoi_id: str, which: Literal["pre", "post"]) -> Path:
     if which not in ("pre", "post"):
         raise ValueError(f"Invalid imagery type: {which}")
@@ -282,15 +375,18 @@ def get_imagery_preview(aoi_id: str, which: Literal["pre", "post"]) -> Path:
     if not tif_path.is_file():
         raise FileNotFoundError(f"{which}.tif not found for {aoi_id}")
 
-    cache_path = aligned_dir / "buildings_out" / f"web_preview_{which}.jpg"
+    out_dir = aligned_dir / "buildings_out"
+    cache_path = out_dir / f"web_preview_{which}.png"
+    legacy_jpg = out_dir / f"web_preview_{which}.jpg"
     if cache_path.is_file() and cache_path.stat().st_mtime >= tif_path.stat().st_mtime:
         return cache_path
 
-    # Drop stale cache when source GeoTIFF changes.
-    if cache_path.is_file():
-        cache_path.unlink()
+    # Drop stale caches when source GeoTIFF changes (including pre-alpha JPEGs).
+    for stale in (cache_path, legacy_jpg):
+        if stale.is_file():
+            stale.unlink()
 
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
     max_dim = 2048
     with rasterio.open(tif_path) as src:
         band_count = min(3, src.count)
@@ -312,8 +408,10 @@ def get_imagery_preview(aoi_id: str, which: Literal["pre", "post"]) -> Path:
     if rgb.dtype != np.uint8:
         rgb = np.clip(rgb, 0, 255).astype(np.uint8)
 
-    image = Image.fromarray(np.transpose(rgb, (1, 2, 0)), mode="RGB")
-    image.save(cache_path, "JPEG", quality=88, optimize=True)
+    rgba = np.transpose(rgb, (1, 2, 0))
+    alpha = _preview_alpha_from_rgb(rgb)
+    image = Image.fromarray(np.dstack([rgba, alpha]), mode="RGBA")
+    image.save(cache_path, "PNG", optimize=True)
     return cache_path
 
 
