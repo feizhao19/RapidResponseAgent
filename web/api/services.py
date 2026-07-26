@@ -106,6 +106,7 @@ def get_aoi_detail(aoi_id: str) -> dict[str, Any]:
     aoi_out = aligned_dir / "aoi_out"
 
     detail = enrich_record_with_case_label(dict(record))
+    # Prefer combined facilities cache for map + Facilities panel; fall back to hospitals-only.
     for name, filename in (
         ("stats", "aoi_stats.json"),
         ("location", "location.json"),
@@ -116,7 +117,24 @@ def get_aoi_detail(aoi_id: str) -> dict[str, Any]:
         if path.is_file():
             detail[name] = _read_json(path)
 
-    if isinstance(detail.get("hospitals"), dict):
+    all_facilities_path = aoi_out / "nearest_facilities_all.json"
+    if all_facilities_path.is_file():
+        try:
+            from geoagent.tools.nearest_facilities import facilities_payload_for_display
+
+            combined = _read_json(all_facilities_path)
+            if isinstance(combined, dict):
+                detail["facilities_payload"] = facilities_payload_for_display(combined)
+                # Keep hospitals key populated for older UI readers.
+                by_kind = (detail["facilities_payload"] or {}).get("by_kind") or {}
+                hospital_kind = by_kind.get("hospital")
+                if isinstance(hospital_kind, dict) and not detail.get("hospitals"):
+                    detail["hospitals"] = hospital_kind
+                elif isinstance(detail.get("hospitals"), dict):
+                    detail["hospitals"] = facilities_payload_for_display(detail["hospitals"])
+        except Exception:
+            pass
+    elif isinstance(detail.get("hospitals"), dict):
         try:
             from geoagent.tools.nearest_facilities import facilities_payload_for_display
 

@@ -1,6 +1,5 @@
 export const DAMAGE_LABEL_ORDER = [
   "no_damage",
-  "no_damage_inferred",
   "minor",
   "major",
   "destroyed",
@@ -9,12 +8,18 @@ export const DAMAGE_LABEL_ORDER = [
 
 export const DAMAGE_LABEL_DISPLAY: Record<string, string> = {
   no_damage: "No damage",
-  no_damage_inferred: "Inferred OK",
+  no_damage_inferred: "No damage",
   minor: "Minor",
   major: "Major",
   destroyed: "Destroyed",
   unknown: "Unknown",
 };
+
+export function foldDamageLabel(label: string | null | undefined): string {
+  const raw = String(label ?? "unknown");
+  if (raw === "no_damage_inferred") return "no_damage";
+  return raw;
+}
 
 export type RegionDamageStats = {
   total: number;
@@ -129,7 +134,7 @@ export function computeRegionStats(
   for (const feature of geojson.features) {
     if (!featureIntersectsBounds(feature, west, south, east, north)) continue;
     total += 1;
-    const label = String(feature.properties?.damage_label ?? "unknown");
+    const label = foldDamageLabel(feature.properties?.damage_label);
     byLabel[label] = (byLabel[label] ?? 0) + 1;
   }
 

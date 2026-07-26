@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,9 @@ _store = SessionStore()
 
 # Keep chat messages usable; full report usually fits well under this.
 _MAX_REPORT_CHARS = 60_000
+
+_MARKER_START = "§RAPID_ASSESSMENT§"
+_MARKER_END = "§END§"
 
 
 def _load_report_markdown(assessment_report: str | None) -> str | None:
@@ -34,26 +38,20 @@ def format_assessment_completion_message(
     valid_pair_coverage: float | None = None,
     assessment_report: str | None = None,
 ) -> str:
-    lines = [
-        "**Assessment completed**",
-        "",
-        f"Job `{job_id}` · completed",
-        "",
-        "**Overall progress: 100/100**",
-    ]
-    if valid_pair_coverage is not None:
-        lines.append("")
-        lines.append(f"Valid pair coverage: **{valid_pair_coverage * 100:.1f}%**")
-    lines.append("")
-    lines.append(f"Results for **{aoi_id}** are loaded on the right.")
-
+    del job_id, valid_pair_coverage  # kept for call-site compatibility; not shown in chat
+    payload = {
+        "v": 1,
+        "status": "completed",
+        "percent": 100,
+        "step": "Results ready",
+        "detail": None,
+        "aoiId": aoi_id,
+    }
+    block = f"{_MARKER_START}{json.dumps(payload, separators=(',', ':'))}{_MARKER_END}"
     report_md = _load_report_markdown(assessment_report)
     if report_md:
-        lines.extend(["", "---", "", report_md])
-    elif assessment_report:
-        lines.extend(["", f"Report path: `{assessment_report}`"])
-
-    return "\n".join(lines)
+        return f"{block}\n\n---\n\n{report_md}"
+    return block
 
 
 def bind_completed_assessment(

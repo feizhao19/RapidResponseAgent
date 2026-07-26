@@ -523,9 +523,10 @@ select {
 .chat-session-delete {
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   width: 28px;
-  font-size: 1rem;
+  flex-shrink: 0;
+  font-size: 1.05rem;
   line-height: 1;
   cursor: pointer;
   border-left: 1px solid var(--glass-border-dark);
@@ -813,6 +814,82 @@ select {
   text-transform: uppercase;
 }
 
+.message-assessment {
+  padding: 0.85rem 0.95rem;
+}
+
+.assessment-progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.assessment-progress-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.assessment-progress-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.assessment-progress-pct {
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.assessment-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.assessment-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.45s ease;
+}
+
+.assessment-progress-card.status-failed .assessment-progress-fill {
+  background: var(--danger);
+}
+
+.assessment-progress-card.status-completed .assessment-progress-fill {
+  background: var(--ok);
+}
+
+.assessment-progress-step {
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assessment-progress-detail {
+  font-size: var(--font-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assessment-progress-report {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
 .activity-timeline {
   margin: 0 0 0.55rem;
   font-size: 0.78rem;
@@ -1000,6 +1077,10 @@ select {
   /* focused cell uses heavier stroke only; no animation */
 }
 
+.priority-grid-hovered {
+  cursor: pointer;
+}
+
 .priority-region-tooltip {
   background: transparent !important;
   border: none !important;
@@ -1012,6 +1093,8 @@ select {
   box-shadow: none !important;
   white-space: normal !important;
   text-align: center;
+  /* Let hover hit the grid cell under the permanent label. */
+  pointer-events: none !important;
 }
 
 .priority-region-tooltip-focus {
@@ -2138,6 +2221,7 @@ select {
 .leaflet-recenter-aoi-control,
 .leaflet-region-select-control,
 .leaflet-buildings-layer-control,
+.leaflet-priority-layer-control,
 .leaflet-situation-weather-control,
 .leaflet-situation-roads-control {
   background: var(--glass-bg-strong);
@@ -2152,6 +2236,7 @@ select {
 .leaflet-recenter-aoi-control button,
 .leaflet-region-select-control button,
 .leaflet-buildings-layer-control button,
+.leaflet-priority-layer-control button,
 .leaflet-situation-weather-control button,
 .leaflet-situation-roads-control button {
   border: none;
@@ -2171,6 +2256,7 @@ select {
 
 .leaflet-region-select-control button.active,
 .leaflet-buildings-layer-control button.active,
+.leaflet-priority-layer-control button.active,
 .leaflet-situation-weather-control button.active,
 .leaflet-situation-roads-control button.active {
   background: rgba(0, 113, 227, 0.14);
@@ -2180,6 +2266,7 @@ select {
 .leaflet-recenter-aoi-control button:disabled,
 .leaflet-region-select-control button:disabled,
 .leaflet-buildings-layer-control button:disabled,
+.leaflet-priority-layer-control button:disabled,
 .leaflet-situation-weather-control button:disabled,
 .leaflet-situation-roads-control button:disabled {
   opacity: 0.45;
@@ -2407,6 +2494,38 @@ body.map-region-dragging {
   margin: 0.85rem 0 0.4rem;
   font-size: var(--font-sm);
   color: var(--text-secondary);
+}
+
+.facilities-panel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.facilities-panel-stack > .hospitals-md + .hospitals-md {
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border);
+}
+
+.facilities-expand-row {
+  margin: 0.55rem 0 0.25rem;
+}
+
+.facilities-expand-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-sm);
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.facilities-expand-btn:hover {
+  color: var(--accent-hover);
 }
 
 .report-md p,

@@ -10,39 +10,43 @@ from typing import Any
 # Weights sum to 100 for a single overall progress bar.
 STEP_WEIGHTS: dict[str, int] = {
     "upload": 2,
+    "match_pre": 5,
     "align": 5,
-    "route": 3,
-    "preprocessing": 5,
-    "location": 5,
-    "perception": 45,
+    "route": 2,
+    "preprocessing": 3,
+    "location": 4,
+    "footprints": 3,
+    "perception": 40,
     "fusion": 7,
     "vlm_arbitrate": 8,
     "stats": 4,
     "facilities": 4,
     "report": 5,
     "visualization": 5,
-    "finalize": 5,
+    "finalize": 3,
 }
 
 PROGRESS_TOTAL = sum(STEP_WEIGHTS.values())
 
 UPLOAD_STEP_LABELS: dict[str, str] = {
-    "upload": "Upload received",
-    "align": "Aligning pre/post GeoTIFF pair",
-    "route": "Routing to assessment pipeline",
+    "upload": "Uploading imagery",
+    "match_pre": "Matching pre imagery",
+    "align": "Aligning imagery",
+    "route": "Starting pipeline",
 }
 
 PIPELINE_STEP_LABELS: dict[str, str] = {
-    "preprocessing": "Preprocessing imagery",
-    "location": "Resolving location (geocoding)",
-    "perception": "ViPDE damage perception",
-    "fusion": "Fusing damage to building footprints",
+    "preprocessing": "Preparing imagery",
+    "location": "Locating AOI",
+    "footprints": "Loading building footprints",
+    "perception": "Detecting damage",
+    "fusion": "Mapping damage to buildings",
     "vlm_arbitrate": "Visual Verifier (optional)",
-    "stats": "Computing AOI statistics",
-    "facilities": "Looking up nearest facilities",
-    "report": "Generating assessment report",
-    "visualization": "Rendering map overlays",
-    "finalize": "Finalizing outputs",
+    "stats": "Summarizing impact",
+    "facilities": "Finding nearby facilities",
+    "report": "Writing report",
+    "visualization": "Rendering overlays",
+    "finalize": "Finishing up",
 }
 
 STEP_LABELS = {**UPLOAD_STEP_LABELS, **PIPELINE_STEP_LABELS}

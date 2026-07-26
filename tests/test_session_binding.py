@@ -13,12 +13,15 @@ from web.api.session_binding import bind_completed_assessment, format_assessment
 class SessionBindingTests(unittest.TestCase):
     def test_format_completion_message(self) -> None:
         text = format_assessment_completion_message(
-            aoi_id="upload_abc123",
+            aoi_id="upload_abc123abc12",
             job_id="job_test",
             valid_pair_coverage=0.99,
         )
-        self.assertIn("**Assessment completed**", text)
-        self.assertIn("upload_abc123", text)
+        self.assertIn("§RAPID_ASSESSMENT§", text)
+        self.assertIn('"status":"completed"', text)
+        self.assertIn("upload_abc123abc12", text)
+        self.assertNotIn("job_test", text)
+        self.assertNotIn("Valid pair coverage", text)
 
     def test_format_completion_message_includes_report_body(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -29,7 +32,7 @@ class SessionBindingTests(unittest.TestCase):
                 encoding="utf-8",
             )
             text = format_assessment_completion_message(
-                aoi_id="upload_abc123",
+                aoi_id="upload_abc123abc12",
                 job_id="job_test",
                 assessment_report=str(report),
             )
@@ -43,15 +46,15 @@ class SessionBindingTests(unittest.TestCase):
             record = store.create_session(title="Upload chat")
             bind_completed_assessment(
                 session_id=record.session_id,
-                aoi_id="upload_abc123",
+                aoi_id="upload_abc123abc12",
                 job_id="job_test",
                 store=store,
             )
             updated = store.get_session(record.session_id)
-            self.assertEqual(updated.active_aoi_id, "upload_abc123")
+            self.assertEqual(updated.active_aoi_id, "upload_abc123abc12")
             messages = store.list_messages(record.session_id)
             self.assertTrue(
-                any("Assessment completed" in message["content"] for message in messages)
+                any('"status":"completed"' in message["content"] for message in messages)
             )
 
 
