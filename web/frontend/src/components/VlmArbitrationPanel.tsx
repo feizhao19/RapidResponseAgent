@@ -498,20 +498,17 @@ export function VlmArbitrationPanel({
       <p className="stats-note">
         {showingDamage ? (
           <>
-            VLM reviews <strong>pre + post</strong> chips for buildings already labeled{" "}
-            <code>destroyed</code>: 6 paired geometric views vote on recommendation, then the model
-            synthesizes final pre/post descriptions and rationale on the original pair. Buildings
-            rejected in footprint review are skipped. Use <strong>Agree</strong> / <strong>Reject</strong>{" "}
-            on the default answer to collect DPO preferences (Reject selects the opposite hypothesis).
+            VLM reasons over paired pre/post-disaster views to verify destroyed buildings.
+            Multi-view reasoning generates the default decision, and Agree / Reject feedback is
+            converted into DPO preference pairs for continual RL Optimization.
             {damage?.ensemble_enabled === false ? " Last run used single-view mode." : null}
             {damage?.dry_run ? " Last run was dry-run (no VLM calls)." : null}
           </>
         ) : (
           <>
-            VLM reviews <strong>pre-disaster</strong> chips for footprint discrepancies with an
-            augmented-view ensemble, then synthesizes a final description and rationale. The panel
-            shows the <strong>default VLM answer</strong>; Agree / Reject records preference pairs
-            for Visual Verifier DPO.
+            VLM reasons over pre-disaster views to verify building footprints. Multi-view reasoning
+            produces the default decision, while Agree / Reject feedback is collected as DPO
+            preference pairs for continual RL Optimization.
             {discrepancy?.dry_run ? " Last run was dry-run (no VLM calls)." : null}
           </>
         )}
