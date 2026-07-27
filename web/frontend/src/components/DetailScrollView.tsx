@@ -47,7 +47,8 @@ function resolveBasemapForAoi(
 }
 
 type Props = {
-  aoiId: string;
+  /** Null / empty = shared idle map; chrome fades in when set. */
+  aoiId: string | null;
   detail: AoiDetail | null;
   bounds?: [number, number, number, number];
   imageryCorners?: ImageryCorners | null;
@@ -70,6 +71,8 @@ type Props = {
   ) => Promise<void> | void;
   vlmJob?: AssessmentJob | null;
   vlmBusy?: boolean;
+  /** Active assessment job for this AOI — drives progressive map reveal. */
+  assessmentJob?: AssessmentJob | null;
 };
 
 function DetailSection({
@@ -145,7 +148,9 @@ export function DetailScrollView({
   onVlmPreference,
   vlmJob = null,
   vlmBusy = false,
+  assessmentJob = null,
 }: Props) {
+  const isActive = Boolean(aoiId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevAoiIdRef = useRef<string | null>(null);
   const basemapChoiceRef = useRef<BasemapId>("pre");
@@ -170,6 +175,12 @@ export function DetailScrollView({
   const [situationRoadsError, setSituationRoadsError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!aoiId) {
+      setSituationWeather(null);
+      setSituationError(null);
+      setSituationLoading(false);
+      return;
+    }
     let cancelled = false;
     setSituationWeather(null);
     setSituationError(null);
@@ -196,6 +207,12 @@ export function DetailScrollView({
   }, [aoiId]);
 
   useEffect(() => {
+    if (!aoiId) {
+      setSituationRoads(null);
+      setSituationRoadsError(null);
+      setSituationRoadsLoading(false);
+      return;
+    }
     let cancelled = false;
     setSituationRoads(null);
     setSituationRoadsError(null);
@@ -221,7 +238,7 @@ export function DetailScrollView({
     };
   }, [aoiId]);
 
-  const showVlmSection = Boolean(detail?.aoi_id === aoiId);
+  const showVlmSection = Boolean(aoiId && detail?.aoi_id === aoiId);
 
   const sections = useMemo(() => {
     if (!showVlmSection) return BASE_SECTIONS;
@@ -269,27 +286,69 @@ export function DetailScrollView({
   }, []);
 
   const detailReady = detail?.aoi_id === aoiId && Boolean(bounds);
-  const imagery = detailReady ? detail?.imagery : undefined;
+  const imagery = detail?.aoi_id === aoiId ? detail.imagery : undefined;
+
+  const imageryTimeline = useMemo(() => {
+    if (!detail || detail.aoi_id !== aoiId) return null;
+    const pickDate = (...candidates: unknown[]): string | null => {
+      for (const raw of candidates) {
+        const text = String(raw ?? "").trim();
+        if (!text) continue;
+        const iso = text.match(/(20\d{2})-(\d{2})-(\d{2})/);
+        if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+        const compact = text.match(/(20\d{2})(\d{2})(\d{2})/);
+        if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+      }
+      return null;
+    };
+    const dates = detail.imagery_dates ?? {};
+    const match = detail.pre_match ?? {};
+    const extras = (match.extras ?? {}) as Record<string, unknown>;
+    return {
+      pre: pickDate(dates.pre, match.date),
+      post: pickDate(dates.post, match.disaster_date, extras.disaster_date),
+    };
+  }, [detail, aoiId]);
+
+  const pipelineProgress = useMemo(() => {
+    if (!assessmentJob || assessmentJob.aoi_id !== aoiId) return null;
+    const progress = assessmentJob.progress;
+    return {
+      status: assessmentJob.status,
+      currentStep: progress?.current_step ?? null,
+      completedSteps: [
+        ...(assessmentJob.completed_steps ?? []),
+        ...(progress?.completed_steps ?? []),
+      ],
+    };
+  }, [assessmentJob, aoiId]);
+
+  // New AOI (including in-progress upload): start from Pre so parent state cannot skip the reveal.
+  useEffect(() => {
+    if (prevAoiIdRef.current === aoiId) return;
+    prevAoiIdRef.current = aoiId;
+    basemapChoiceRef.current = "pre";
+    setBasemap("pre");
+  }, [aoiId]);
 
   useEffect(() => {
     if (!detailReady || !imagery) return;
+    // While an assessment cinematic is running, MapPanel owns Pre → Post.
+    if (assessmentJob && assessmentJob.aoi_id === aoiId) {
+      const status = String(assessmentJob.status || "");
+      if (status && status !== "completed" && status !== "failed" && status !== "cancelled") {
+        return;
+      }
+    }
 
     const hasPre = Boolean(imagery.pre);
     const hasPost = Boolean(imagery.post);
-    const switched = prevAoiIdRef.current !== null && prevAoiIdRef.current !== aoiId;
-
-    if (switched) {
-      const next = resolveBasemapForAoi(basemapChoiceRef.current, hasPre, hasPost);
-      basemapChoiceRef.current = next;
-      setBasemap(next);
-    } else if (prevAoiIdRef.current === null) {
-      const next = resolveBasemapForAoi("pre", hasPre, hasPost);
+    const next = resolveBasemapForAoi(basemapChoiceRef.current, hasPre, hasPost);
+    if (next !== basemap) {
       basemapChoiceRef.current = next;
       setBasemap(next);
     }
-
-    prevAoiIdRef.current = aoiId;
-  }, [aoiId, detailReady, imagery]);
+  }, [aoiId, detailReady, imagery, assessmentJob, basemap]);
 
   useEffect(() => {
     setBuildingScope("official");
@@ -472,36 +531,53 @@ export function DetailScrollView({
   );
 
   return (
-    <section className="detail-panel">
-      <nav className="section-nav" aria-label="AOI sections">
-        {sections.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            className={`section-nav-btn ${activeSection === id ? "active" : ""}`}
-            onClick={() => scrollToSection(id)}
-          >
-            {label}
-          </button>
-        ))}
+    <section
+      className={`detail-panel ${
+        isActive ? "detail-chrome-visible" : "detail-panel-idle-map"
+      }`}
+    >
+      <nav className="section-nav detail-chrome-nav" aria-label="AOI sections">
+        {sections.map(({ id, label }) => {
+          const enabled = isActive || id === "map";
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`section-nav-btn ${activeSection === id ? "active" : ""}`}
+              onClick={() => {
+                if (!enabled) return;
+                scrollToSection(id);
+              }}
+              disabled={!enabled}
+              title={enabled ? undefined : "Select or upload an AOI to open this section"}
+            >
+              {label}
+            </button>
+          );
+        })}
       </nav>
 
       <div className="detail-scroll" ref={scrollRef}>
         <DetailSection
           id="map"
           title="Damage Map"
-          actions={buildingScopeToggle}
           sectionRef={setSectionRef("map")}
         >
           <MapPanel
-            key={aoiId}
             aoiId={aoiId}
             bounds={bounds}
             imagery={imagery}
-            imageryReady={detailReady}
+            imageryReady={
+              Boolean(aoiId) &&
+              detail?.aoi_id === aoiId &&
+              Boolean(bounds || detail.imagery?.pre || detail.imagery?.post)
+            }
             imageryCorners={imageryCorners}
             buildingsGeojson={scopedBuildingsGeojson}
             buildingScope={buildingScope}
+            onBuildingScopeChange={setBuildingScope}
+            showFusedBuildingScope={showFusedBuildingView}
+            buildingScopePending={detailLoading && !showFusedBuildingView}
             center={mapCenter}
             basemap={basemap}
             onBasemapChange={handleBasemapChange}
@@ -515,57 +591,67 @@ export function DetailScrollView({
             situationRoadsLoading={situationRoadsLoading}
             situationRoadsError={situationRoadsError}
             aoiStats={(detail?.stats as Record<string, unknown> | undefined) ?? null}
+            imageryTimeline={imageryTimeline}
+            pipelineProgress={pipelineProgress}
           />
         </DetailSection>
 
-        <DetailSection
-          id="stats"
-          title="Assessment Stats"
-          actions={buildingScopeToggle}
-          sectionRef={setSectionRef("stats")}
-        >
-          <StatsPanel
-            detail={detail}
-            buildingScope={buildingScope}
-            buildingsGeojson={buildingsGeojson}
-          />
-        </DetailSection>
+        {isActive && (
+          <>
+            <DetailSection
+              id="stats"
+              title="Assessment Stats"
+              actions={buildingScopeToggle}
+              sectionRef={setSectionRef("stats")}
+            >
+              <StatsPanel
+                detail={detail}
+                buildingScope={buildingScope}
+                buildingsGeojson={buildingsGeojson}
+              />
+            </DetailSection>
 
-        {showVlmSection && (
-          <DetailSection
-            id="vlm"
-            title="Visual Verifier（VLM reasoning）"
-            sectionRef={setSectionRef("vlm")}
-          >
-            <VlmArbitrationPanel
-              detail={detail}
-              onShowBuildingOnMap={showVlmBuildingOnMap}
-              onRunVlm={onRunVlm}
-              onStopVlm={onStopVlm}
-              onVlmPreference={onVlmPreference}
-              vlmJob={vlmJob}
-              vlmBusy={vlmBusy}
-            />
-          </DetailSection>
+            {showVlmSection && (
+              <DetailSection
+                id="vlm"
+                title="Visual Verifier（VLM reasoning）"
+                sectionRef={setSectionRef("vlm")}
+              >
+                <VlmArbitrationPanel
+                  detail={detail}
+                  onShowBuildingOnMap={showVlmBuildingOnMap}
+                  onRunVlm={onRunVlm}
+                  onStopVlm={onStopVlm}
+                  onVlmPreference={onVlmPreference}
+                  vlmJob={vlmJob}
+                  vlmBusy={vlmBusy}
+                />
+              </DetailSection>
+            )}
+
+            <DetailSection
+              id="report"
+              title="Assessment Report"
+              actions={buildingScopeToggle}
+              sectionRef={setSectionRef("report")}
+            >
+              <ReportPanel
+                detail={detail}
+                buildingScope={buildingScope}
+                buildingsGeojson={buildingsGeojson}
+                onShowBuildingOnMap={showBuildingOnMap}
+              />
+            </DetailSection>
+
+            <DetailSection
+              id="facilities"
+              title="Facilities"
+              sectionRef={setSectionRef("facilities")}
+            >
+              <FacilitiesPanel detail={detail} onShowOnMap={showHospitalOnMap} />
+            </DetailSection>
+          </>
         )}
-
-        <DetailSection
-          id="report"
-          title="Assessment Report"
-          actions={buildingScopeToggle}
-          sectionRef={setSectionRef("report")}
-        >
-          <ReportPanel
-            detail={detail}
-            buildingScope={buildingScope}
-            buildingsGeojson={buildingsGeojson}
-            onShowBuildingOnMap={showBuildingOnMap}
-          />
-        </DetailSection>
-
-        <DetailSection id="facilities" title="Facilities" sectionRef={setSectionRef("facilities")}>
-          <FacilitiesPanel detail={detail} onShowOnMap={showHospitalOnMap} />
-        </DetailSection>
       </div>
     </section>
   );

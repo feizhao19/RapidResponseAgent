@@ -1346,6 +1346,7 @@ select {
   min-height: 0;
   overflow: hidden;
   background: transparent;
+  position: relative;
 }
 
 .detail-panel-empty {
@@ -1358,6 +1359,163 @@ select {
 .detail-panel-empty p {
   margin: 0;
   font-size: 0.92rem;
+}
+
+/* Idle + active share the same map footprint so chrome cannot resize/flash the map. */
+.detail-panel-idle-map,
+.detail-chrome-visible {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.detail-panel-idle-map .detail-scroll,
+.detail-chrome-visible .detail-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.detail-chrome-visible .detail-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.detail-panel-idle-map #section-map,
+.detail-chrome-visible #section-map {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: min(70vh, 640px);
+  min-height: min(70vh, 640px);
+  max-height: min(70vh, 640px);
+  padding: 0;
+  border-bottom: none;
+  position: relative;
+}
+
+.detail-panel-idle-map #section-map > :not(.detail-section-header),
+.detail-chrome-visible #section-map > :not(.detail-section-header) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-panel-idle-map .map-wrap,
+.detail-chrome-visible .map-wrap {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+/*
+ * Section nav stays in normal flow (above the map) so it is never covered by Leaflet.
+ * Visible in idle too; Map height is fixed so showing nav does not resize / flash tiles.
+ */
+.detail-chrome-nav {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 40;
+  opacity: 1;
+  pointer-events: auto;
+  margin: 0 0 0.55rem;
+  border-radius: var(--radius-sm);
+}
+
+.detail-panel-idle-map .detail-section-header,
+.detail-chrome-visible #section-map .detail-section-header {
+  display: none;
+}
+
+.detail-chrome-visible #section-stats,
+.detail-chrome-visible #section-vlm,
+.detail-chrome-visible #section-report,
+.detail-chrome-visible #section-facilities {
+  flex: 0 0 auto;
+  opacity: 0;
+  padding: 1.25rem 0 1.75rem;
+  border-bottom: 1px solid var(--glass-border-dark);
+}
+
+/* Lower sections fade in when an AOI becomes active (nav is already visible). */
+.detail-chrome-visible #section-stats,
+.detail-chrome-visible #section-vlm,
+.detail-chrome-visible #section-report,
+.detail-chrome-visible #section-facilities {
+  animation: detail-chrome-from-bottom 1s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.detail-chrome-visible #section-stats {
+  animation-delay: 0.12s;
+}
+
+.detail-chrome-visible #section-vlm {
+  animation-delay: 0.2s;
+}
+
+.detail-chrome-visible #section-report {
+  animation-delay: 0.28s;
+}
+
+.detail-chrome-visible #section-facilities {
+  animation-delay: 0.36s;
+}
+
+/* Do NOT set a base opacity:0 on controls — zoom/recreate would leave them stuck invisible. */
+.detail-chrome-visible .legend,
+.detail-chrome-visible .map-scope-note {
+  animation: detail-chrome-fade 1s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+}
+
+.detail-chrome-visible .leaflet-control-container {
+  z-index: 1000;
+}
+
+@keyframes detail-chrome-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes detail-chrome-from-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes detail-chrome-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-chrome-visible #section-stats,
+  .detail-chrome-visible #section-vlm,
+  .detail-chrome-visible #section-report,
+  .detail-chrome-visible #section-facilities,
+  .detail-chrome-visible .legend,
+  .detail-chrome-visible .map-scope-note {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 .section-nav {
@@ -1383,9 +1541,19 @@ select {
   font-size: 0.84rem;
 }
 
-.section-nav-btn:hover {
+.section-nav-btn:hover:not(:disabled) {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.4);
+}
+
+.section-nav-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.section-nav-btn:disabled:hover {
+  color: var(--text-secondary);
+  background: transparent;
 }
 
 .section-nav-btn.active {
@@ -1561,6 +1729,124 @@ select {
   border: 1px solid var(--glass-border-dark);
   background: rgba(200, 200, 210, 0.35);
   box-shadow: var(--glass-shadow-sm);
+}
+
+.map-wrap.map-cinematic-active {
+  box-shadow:
+    var(--glass-shadow-sm),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.map-idle-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 1.1rem;
+  z-index: 500;
+  margin: 0;
+  padding: 0.55rem 0.95rem;
+  transform: translateX(-50%);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-shadow-sm);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  text-align: center;
+  max-width: calc(100% - 2rem);
+}
+
+.map-imagery-timeline {
+  position: absolute;
+  left: 50%;
+  bottom: 0.85rem;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  transform: translateX(-50%);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.map-imagery-timeline-visible {
+  opacity: 1;
+}
+
+.map-imagery-timeline-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 4.5rem;
+  opacity: 0.55;
+  transition: opacity 0.35s ease;
+}
+
+.map-imagery-timeline-item.active {
+  opacity: 1;
+}
+
+.map-imagery-timeline-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.map-imagery-timeline-date {
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.map-imagery-timeline-rule {
+  width: 1.75rem;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(100, 116, 139, 0.15),
+    rgba(100, 116, 139, 0.65),
+    rgba(100, 116, 139, 0.15)
+  );
+}
+
+.situation-fade {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.situation-fade.situation-fade-visible {
+  opacity: 1;
+}
+
+.situation-timeline.situation-fade-visible,
+.situation-hud.situation-fade-visible {
+  pointer-events: auto;
+}
+
+.situation-chrome {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.situation-chrome.situation-chrome-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .situation-hud {
@@ -2219,6 +2505,7 @@ select {
 }
 
 .leaflet-recenter-aoi-control,
+.leaflet-building-scope-control,
 .leaflet-region-select-control,
 .leaflet-buildings-layer-control,
 .leaflet-priority-layer-control,
@@ -2234,6 +2521,7 @@ select {
 }
 
 .leaflet-recenter-aoi-control button,
+.leaflet-building-scope-control button,
 .leaflet-region-select-control button,
 .leaflet-buildings-layer-control button,
 .leaflet-priority-layer-control button,
@@ -2249,7 +2537,8 @@ select {
   min-width: 6.5rem;
 }
 
-.leaflet-recenter-aoi-control button:hover:not(:disabled) {
+.leaflet-recenter-aoi-control button:hover:not(:disabled),
+.leaflet-building-scope-control button:hover:not(:disabled) {
   background: rgba(0, 113, 227, 0.1);
   color: var(--accent);
 }
@@ -2258,12 +2547,14 @@ select {
 .leaflet-buildings-layer-control button.active,
 .leaflet-priority-layer-control button.active,
 .leaflet-situation-weather-control button.active,
-.leaflet-situation-roads-control button.active {
+.leaflet-situation-roads-control button.active,
+.leaflet-building-scope-control button.active {
   background: rgba(0, 113, 227, 0.14);
   color: var(--accent);
 }
 
 .leaflet-recenter-aoi-control button:disabled,
+.leaflet-building-scope-control button:disabled,
 .leaflet-region-select-control button:disabled,
 .leaflet-buildings-layer-control button:disabled,
 .leaflet-priority-layer-control button:disabled,

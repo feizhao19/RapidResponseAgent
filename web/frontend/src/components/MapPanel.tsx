@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import {
   GeoJSON,
   ImageOverlay,
@@ -38,6 +38,31 @@ import {
   SituationRoadLayer,
   SituationWindLayer,
 } from "./SituationLayer";
+import {
+  CONUS_CENTER,
+  CONUS_ZOOM,
+  FLY_DURATION_SEC,
+  FLY_HOLD_MS,
+  FLY_MAX_ZOOM,
+  FLY_PADDING,
+  FOCUS_DURATION_SEC,
+  IMAGERY_FADE_MS,
+  MARKERS_AFTER_POLYGONS_MS,
+  OVERLAY_FADE_MS,
+  POLYGON_FADE_MS,
+  POST_TO_POLYGONS_MS,
+  PRE_ARRIVAL_HOLD_MS,
+  PRE_TO_POST_MS,
+  RECENTER_DURATION_SEC,
+  STREET_REF_FADE_MS,
+  animateOpacity,
+  deriveMapRevealReadiness,
+  imageryPreviewUrl,
+  prefetchImageryPreview,
+  revealPhaseOrder,
+  type MapRevealPhase,
+  type PipelineProgressHint,
+} from "../mapCinematic";
 
 function escapeHtml(value: string): string {
   return value
@@ -118,12 +143,17 @@ type BasemapOption = {
 };
 
 type Props = {
-  aoiId: string;
+  /** Null / empty = shared idle CONUS map (no AOI chrome). */
+  aoiId: string | null;
   bounds?: [number, number, number, number];
   imagery?: { pre?: boolean; post?: boolean };
   imageryCorners?: ImageryCorners | null;
   buildingsGeojson?: GeoJSON.FeatureCollection | null;
   buildingScope?: BuildingScope;
+  /** Switch Official / Fused inventory on the map (left control above Recenter). */
+  onBuildingScopeChange?: (scope: BuildingScope) => void;
+  showFusedBuildingScope?: boolean;
+  buildingScopePending?: boolean;
   center?: [number, number];
   basemap: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
@@ -140,6 +170,17 @@ type Props = {
   aoiStats?: Record<string, unknown> | null;
   /** Cleared focus / chat deep-link after user recenters on the AOI. */
   onRecenter?: () => void;
+  /** Optional pre/post dates for the soft imagery timeline strip. */
+  imageryTimeline?: { pre?: string | null; post?: string | null } | null;
+  /**
+   * When true (default), open with CONUS satellite then slowly fly + fade overlays.
+   * Set false only for tests / non-cinematic embeds.
+   */
+  cinematic?: boolean;
+  /** Live assessment job progress — gates Pre / Post / polygons during upload. */
+  pipelineProgress?: PipelineProgressHint | null;
+  /** Caption shown on the shared idle CONUS map. */
+  idleCaption?: string;
 };
 
 function boundsToLeaflet(
@@ -152,11 +193,108 @@ function boundsToLeaflet(
   ];
 }
 
-function FitBounds({ bounds }: { bounds: [number, number, number, number] }) {
-  const map = useMap();
+/** Non-rotated imagery: fade in on mount (Pre ↔ Post / Street → imagery). */
+function FadingImageOverlay({
+  url,
+  bounds,
+  opacity = 1,
+}: {
+  url: string;
+  bounds: [[number, number], [number, number]];
+  opacity?: number;
+}) {
+  const [layerOpacity, setLayerOpacity] = useState(0);
+
   useEffect(() => {
-    map.fitBounds(boundsToLeaflet(bounds), { padding: [24, 24] });
-  }, [bounds, map]);
+    setLayerOpacity(0);
+    return animateOpacity(0, opacity, IMAGERY_FADE_MS, setLayerOpacity);
+  }, [url, bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1], opacity]);
+
+  return <ImageOverlay url={url} bounds={bounds} opacity={layerOpacity} zIndex={0} />;
+}
+
+/**
+ * First reveal: hold CONUS briefly, then ease into the AOI.
+ * Subsequent bound updates for the same AOI are ignored (recenter uses RecenterAoiView).
+ */
+function CinematicApproach({
+  aoiId,
+  bounds,
+  enabled,
+  onPhase,
+}: {
+  aoiId: string | null;
+  bounds: [number, number, number, number] | undefined;
+  enabled: boolean;
+  onPhase: (phase: MapRevealPhase) => void;
+}) {
+  const map = useMap();
+  const flownKeyRef = useRef<string | null>(null);
+  const timersRef = useRef<number[]>([]);
+
+  const clearTimers = useCallback(() => {
+    for (const id of timersRef.current) window.clearTimeout(id);
+    timersRef.current = [];
+  }, []);
+
+  // useLayoutEffect: snap to CONUS before paint so AOI switches don't flash the old zoom.
+  useLayoutEffect(() => {
+    flownKeyRef.current = null;
+    clearTimers();
+    if (!enabled || !aoiId) return;
+    onPhase("idle");
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const alreadyConus =
+      Math.abs(center.lat - CONUS_CENTER[0]) < 0.8 &&
+      Math.abs(center.lng - CONUS_CENTER[1]) < 0.8 &&
+      Math.abs(zoom - CONUS_ZOOM) < 0.6;
+    if (!alreadyConus) {
+      map.setView(CONUS_CENTER, CONUS_ZOOM, { animate: false });
+    }
+  }, [aoiId, enabled, map, onPhase, clearTimers]);
+
+  useEffect(() => {
+    if (!enabled || !aoiId) {
+      if (!enabled && bounds) {
+        map.fitBounds(boundsToLeaflet(bounds), { padding: FLY_PADDING, maxZoom: FLY_MAX_ZOOM });
+        onPhase("settled");
+      }
+      return;
+    }
+    if (!bounds) {
+      onPhase("idle");
+      return;
+    }
+
+    const key = `${aoiId}:${bounds.join(",")}`;
+    if (flownKeyRef.current === key) return;
+    flownKeyRef.current = key;
+    clearTimers();
+    onPhase("flying");
+
+    const holdId = window.setTimeout(() => {
+      map.invalidateSize({ pan: false });
+      map.flyToBounds(boundsToLeaflet(bounds), {
+        padding: FLY_PADDING,
+        duration: FLY_DURATION_SEC,
+        easeLinearity: 0.18,
+        maxZoom: FLY_MAX_ZOOM,
+      });
+      const arriveId = window.setTimeout(() => {
+        // Fly finished — brief linger on context satellite, then advance to Pre.
+        const preId = window.setTimeout(() => {
+          onPhase("pre");
+        }, PRE_ARRIVAL_HOLD_MS);
+        timersRef.current.push(preId);
+      }, FLY_DURATION_SEC * 1000 + 120);
+      timersRef.current.push(arriveId);
+    }, FLY_HOLD_MS);
+    timersRef.current.push(holdId);
+
+    return () => clearTimers();
+  }, [aoiId, bounds, enabled, map, onPhase, clearTimers]);
+
   return null;
 }
 
@@ -175,7 +313,12 @@ function RecenterAoiView({
     if (!bounds || requestKey <= 0 || requestKey === lastKeyRef.current) return;
     lastKeyRef.current = requestKey;
     map.invalidateSize({ pan: false });
-    map.flyToBounds(boundsToLeaflet(bounds), { padding: [28, 28], duration: 0.7, maxZoom: 17 });
+    map.flyToBounds(boundsToLeaflet(bounds), {
+      padding: [36, 36],
+      duration: RECENTER_DURATION_SEC,
+      easeLinearity: 0.2,
+      maxZoom: FLY_MAX_ZOOM,
+    });
   }, [bounds, requestKey, map]);
 
   return null;
@@ -228,6 +371,76 @@ function RecenterAoiControl({
   return null;
 }
 
+const BUILDING_SCOPE_SHORT: Record<"official" | "fused", string> = {
+  official: "Official",
+  fused: "Official+",
+};
+
+/** Toggle Official ↔ fused inventory — single control above Recenter. */
+function BuildingScopeMapControl({
+  value,
+  onChange,
+  showFused,
+  pending = false,
+}: {
+  value: BuildingScope;
+  onChange: (scope: BuildingScope) => void;
+  showFused: boolean;
+  pending?: boolean;
+}) {
+  const map = useMap();
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const showFusedRef = useRef(showFused);
+  showFusedRef.current = showFused;
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+
+  useEffect(() => {
+    const control = new L.Control({ position: "topleft" });
+    control.onAdd = () => {
+      const container = L.DomUtil.create("div", "leaflet-building-scope-control");
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+
+      const button = L.DomUtil.create("button", "", container) as HTMLButtonElement;
+      button.type = "button";
+      button.addEventListener("click", () => {
+        const fusedReady = showFusedRef.current || pendingRef.current;
+        if (!fusedReady) return;
+        const current = valueRef.current === "fused" ? "fused" : "official";
+        onChangeRef.current(current === "official" ? "fused" : "official");
+      });
+      return container;
+    };
+    control.addTo(map);
+    return () => {
+      control.remove();
+    };
+  }, [map]);
+
+  useEffect(() => {
+    const button = map
+      .getContainer()
+      .querySelector(".leaflet-building-scope-control button") as HTMLButtonElement | null;
+    if (!button) return;
+    const scope: "official" | "fused" = value === "fused" ? "fused" : "official";
+    const fusedReady = showFused || pending;
+    button.textContent = BUILDING_SCOPE_SHORT[scope];
+    button.title = fusedReady
+      ? `${BUILDING_SCOPE_HINTS[scope]} (click to toggle Official / Official+)`
+      : `${BUILDING_SCOPE_HINTS.official} (Official+ unavailable until extras load)`;
+    button.setAttribute("aria-label", BUILDING_SCOPE_LABELS[scope]);
+    button.setAttribute("aria-pressed", scope === "fused" ? "true" : "false");
+    button.classList.toggle("active", scope === "fused");
+    button.disabled = !fusedReady;
+  }, [value, showFused, pending, map]);
+
+  return null;
+}
+
 function FocusMapTarget({
   focus,
   markerRefs,
@@ -259,7 +472,12 @@ function FocusMapTarget({
           [south, west],
           [north, east],
         ],
-        { padding: [40, 40], duration: 0.8, maxZoom: 16 },
+        {
+          padding: [44, 44],
+          duration: FOCUS_DURATION_SEC,
+          easeLinearity: 0.2,
+          maxZoom: FLY_MAX_ZOOM,
+        },
       );
       return;
     }
@@ -272,7 +490,12 @@ function FocusMapTarget({
             [south, west],
             [north, east],
           ],
-          { padding: [40, 40], duration: 0.8, maxZoom: 16 },
+          {
+            padding: [44, 44],
+            duration: FOCUS_DURATION_SEC,
+            easeLinearity: 0.2,
+            maxZoom: FLY_MAX_ZOOM,
+          },
         );
       }
       return;
@@ -280,7 +503,10 @@ function FocusMapTarget({
 
     const [lon, lat] = focus.coordinates_wgs84;
     const targetZoom = Math.max(map.getZoom(), 15);
-    map.flyTo([lat, lon], targetZoom, { duration: 0.75 });
+    map.flyTo([lat, lon], targetZoom, {
+      duration: FOCUS_DURATION_SEC,
+      easeLinearity: 0.2,
+    });
     const timer = window.setTimeout(() => {
       if (focus.kind === "hospital") {
         const matched = Object.keys(markerRefs.current).find((key) => {
@@ -311,7 +537,7 @@ function FocusMapTarget({
       if (layer && "openPopup" in layer && typeof layer.openPopup === "function") {
         layer.openPopup();
       }
-    }, 600);
+    }, FOCUS_DURATION_SEC * 1000 * 0.75);
     return () => window.clearTimeout(timer);
   }, [focus, map, markerRefs, buildingLayerRefs]);
 
@@ -338,8 +564,8 @@ function priorityRegionStyle(priority?: number): L.PathOptions {
     return {
       color: "#64748b",
       weight: 2.25,
-      fillColor: "#4a1c18",
-      fillOpacity: 0.52,
+      fillColor: "#9f1212",
+      fillOpacity: 0.56,
       className: "priority-grid-cell priority-grid-focused",
     };
   }
@@ -347,15 +573,15 @@ function priorityRegionStyle(priority?: number): L.PathOptions {
     return {
       color: "#7c8a9a",
       weight: 1.5,
-      fillColor: "#8f5246",
-      fillOpacity: 0.38,
+      fillColor: "#d1433a",
+      fillOpacity: 0.42,
       className: "priority-grid-cell",
     };
   }
   return {
     color: "#7c8a9a",
     weight: 1.25,
-    fillColor: "#b9a094",
+    fillColor: "#c9a9a0",
     fillOpacity: 0.26,
     className: "priority-grid-cell",
   };
@@ -374,15 +600,15 @@ function rgbToHex(r: number, g: number, b: number): string {
 }
 
 /**
- * Low-chroma sequential ramp (low → high Score).
- * Stays in one warm family so the 3×3 reads as one layer, not a rainbow.
- * High end is deepened so top-priority cells read clearly against imagery.
+ * Low → high Score sequential ramp.
+ * High end shifts toward clear reds so heavily damaged cells read as urgent on imagery.
  */
 const SEVERITY_RAMP: Array<{ t: number; hex: string }> = [
   { t: 0, hex: "#c5ced9" },
-  { t: 0.35, hex: "#b9a094" },
-  { t: 0.65, hex: "#8f5246" },
-  { t: 1, hex: "#4a1c18" },
+  { t: 0.3, hex: "#c9a9a0" },
+  { t: 0.55, hex: "#d1433a" },
+  { t: 0.8, hex: "#c41e1e" },
+  { t: 1, hex: "#9f1212" },
 ];
 
 function lerpSeverityColor(t: number): string {
@@ -443,7 +669,7 @@ function gridCellStyle(
     color: highlight ? "#334155" : "#7c8a9a",
     weight: focused ? 2.4 : hovered ? 2.15 : 1.15,
     fillColor,
-    fillOpacity: focused ? 0.56 : hovered ? Math.min(0.62, 0.34 + t * 0.34) : 0.28 + t * 0.34,
+    fillOpacity: focused ? 0.6 : hovered ? Math.min(0.66, 0.36 + t * 0.36) : 0.3 + t * 0.36,
     className: focused
       ? "priority-grid-cell priority-grid-focused"
       : hovered
@@ -531,7 +757,10 @@ function PriorityGridOverlay({
                 cell.bounds_wgs84[2] === focus.bounds_wgs84[2] &&
                 cell.bounds_wgs84[3] === focus.bounds_wgs84[3])),
         );
-        const baseStyle = gridCellStyle(cell, { maxImpact, focused });
+        const baseStyle = {
+          ...gridCellStyle(cell, { maxImpact, focused }),
+          pane: "priorityPane",
+        };
         return (
           <Rectangle
             key={`priority-grid-${cell.direction}`}
@@ -540,10 +769,14 @@ function PriorityGridOverlay({
               [cell.bounds_wgs84[3], cell.bounds_wgs84[2]],
             ]}
             pathOptions={baseStyle}
+            pane="priorityPane"
             eventHandlers={{
               mouseover: (event) => {
                 const layer = event.target as L.Path;
-                layer.setStyle(gridCellStyle(cell, { maxImpact, focused, hovered: true }));
+                layer.setStyle({
+                  ...gridCellStyle(cell, { maxImpact, focused, hovered: true }),
+                  pane: "priorityPane",
+                });
                 layer.bringToFront();
               },
               mouseout: (event) => {
@@ -555,6 +788,7 @@ function PriorityGridOverlay({
             <Tooltip
               permanent
               direction="center"
+              pane="priorityLabelPane"
               className={
                 focused
                   ? "priority-region-tooltip priority-region-tooltip-focus"
@@ -601,20 +835,81 @@ function directionShortLabel(direction: string): string {
   return map[raw] || raw;
 }
 
-function BuildingsPane() {
+function useOverlayReveal(visible: boolean, fadeMs: number = OVERLAY_FADE_MS) {
+  const [mounted, setMounted] = useState(visible);
+  const [revealed, setRevealed] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      const frame = window.requestAnimationFrame(() => setRevealed(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    setRevealed(false);
+    const timer = window.setTimeout(() => setMounted(false), fadeMs);
+    return () => window.clearTimeout(timer);
+  }, [visible, fadeMs]);
+
+  return { mounted, revealed };
+}
+
+function PriorityPane({ revealed }: { revealed: boolean }) {
+  const map = useMap();
+  useEffect(() => {
+    const ensure = (name: string, zIndex: string) => {
+      if (!map.getPane(name)) map.createPane(name);
+      const pane = map.getPane(name);
+      if (!pane) return;
+      pane.style.zIndex = zIndex;
+      pane.style.opacity = pane.style.opacity || "0";
+      pane.style.transition = `opacity ${OVERLAY_FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+      pane.style.pointerEvents = "none";
+    };
+    // Labels sit above the grid fill so P1 / score stay readable.
+    ensure("priorityPane", "452");
+    ensure("priorityLabelPane", "453");
+  }, [map]);
+
+  useEffect(() => {
+    for (const name of ["priorityPane", "priorityLabelPane"] as const) {
+      const pane = map.getPane(name);
+      if (!pane) continue;
+      pane.style.opacity = revealed ? "1" : "0";
+      // Grid cells need hover; labels stay non-interactive.
+      if (name === "priorityPane") {
+        pane.style.pointerEvents = revealed ? "auto" : "none";
+      }
+    }
+  }, [revealed, map]);
+
+  return null;
+}
+
+function BuildingsPane({ revealed }: { revealed: boolean }) {
   const map = useMap();
   useEffect(() => {
     if (!map.getPane("buildingsPane")) {
       map.createPane("buildingsPane");
       const pane = map.getPane("buildingsPane");
-      if (pane) pane.style.zIndex = "450";
+      if (pane) {
+        pane.style.zIndex = "450";
+        pane.style.opacity = "0";
+        pane.style.transition = `opacity ${POLYGON_FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+      }
     }
   }, [map]);
+
+  useEffect(() => {
+    const pane = map.getPane("buildingsPane");
+    if (!pane) return;
+    pane.style.opacity = revealed ? "1" : "0";
+  }, [revealed, map]);
+
   return null;
 }
 
 /** Street lines/names above imagery, below building polygons. */
-function StreetOverlayPane() {
+function StreetOverlayPane({ opacity }: { opacity: number }) {
   const map = useMap();
   useEffect(() => {
     if (!map.getPane("streetOverlayPane")) {
@@ -623,9 +918,18 @@ function StreetOverlayPane() {
       if (pane) {
         pane.style.zIndex = "425";
         pane.style.pointerEvents = "none";
+        pane.style.opacity = "0";
+        pane.style.transition = `opacity ${STREET_REF_FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
       }
     }
   }, [map]);
+
+  useEffect(() => {
+    const pane = map.getPane("streetOverlayPane");
+    if (!pane) return;
+    pane.style.opacity = String(opacity);
+  }, [opacity, map]);
+
   return null;
 }
 
@@ -640,6 +944,17 @@ function MapResizeHandler() {
     map.invalidateSize({ pan: false });
     return () => observer.disconnect();
   }, [map]);
+  return null;
+}
+
+/** Snap back to continental overview when the shared map returns to idle. */
+function IdleConusSnap({ active }: { active: boolean }) {
+  const map = useMap();
+  useLayoutEffect(() => {
+    if (!active) return;
+    map.setView(CONUS_CENTER, CONUS_ZOOM, { animate: false });
+    map.invalidateSize({ pan: false });
+  }, [active, map]);
   return null;
 }
 
@@ -753,6 +1068,9 @@ export function MapPanel({
   imageryCorners,
   buildingsGeojson = null,
   buildingScope = "official",
+  onBuildingScopeChange,
+  showFusedBuildingScope = false,
+  buildingScopePending = false,
   center,
   basemap,
   onBasemapChange,
@@ -767,7 +1085,13 @@ export function MapPanel({
   situationRoadsError = null,
   aoiStats = null,
   onRecenter,
+  imageryTimeline = null,
+  cinematic = true,
+  pipelineProgress = null,
+  idleCaption = "Select an AOI or upload post-disaster imagery to begin",
 }: Props) {
+  const isIdle = !aoiId;
+  const cinematicEnabled = cinematic && !isIdle;
   const markerRefs = useRef<Record<string, L.Marker>>({});
   const buildingLayerRefs = useRef<Record<string, L.Layer>>({});
   const mapWrapRef = useRef<HTMLDivElement>(null);
@@ -779,6 +1103,184 @@ export function MapPanel({
   const [roadsVisible, setRoadsVisible] = useState(false);
   const [hourIndex, setHourIndex] = useState(0);
   const [recenterRequestKey, setRecenterRequestKey] = useState(0);
+  const [revealPhase, setRevealPhase] = useState<MapRevealPhase>(
+    cinematicEnabled ? "idle" : "settled",
+  );
+  const [axisOpacity, setAxisOpacity] = useState(cinematicEnabled ? 0 : 1);
+  const [polygonsRevealed, setPolygonsRevealed] = useState(!cinematicEnabled);
+  const [markersRevealed, setMarkersRevealed] = useState(!cinematicEnabled);
+  /** During cinematic drive, MapPanel owns Pre/Post so parent prefs cannot skip Pre. */
+  const [cinematicBasemap, setCinematicBasemap] = useState<BasemapId | null>(null);
+  /** True once the Pre preview PNG is in the browser cache / decoded. */
+  const [prePreviewReady, setPrePreviewReady] = useState(false);
+  const priorityReveal = useOverlayReveal(priorityVisible);
+  const weatherReveal = useOverlayReveal(situationVisible);
+  const roadsReveal = useOverlayReveal(roadsVisible);
+  const cinematicDrivingRef = useRef(false);
+
+  const readiness = useMemo(
+    () =>
+      deriveMapRevealReadiness({
+        bounds,
+        imagery,
+        hasBuildings: Boolean(buildingsGeojson?.features?.length),
+        progress: pipelineProgress,
+      }),
+    [bounds, imagery, buildingsGeojson, pipelineProgress],
+  );
+
+  // Prefer locked cinematic basemap; while approaching/on Pre, never inherit a stale parent "post".
+  const effectiveBasemap: BasemapId =
+    cinematicBasemap ??
+    (cinematicEnabled &&
+    (revealPhase === "idle" || revealPhase === "flying" || revealPhase === "pre")
+      ? "pre"
+      : basemap);
+
+  const handleRevealPhase = useCallback((phase: MapRevealPhase) => {
+    setRevealPhase((current) => {
+      if (phase === "idle") return "idle";
+      if (current === "settled" && phase !== "settled") return current;
+      if (revealPhaseOrder(phase) < revealPhaseOrder(current) && current !== "idle") {
+        return current;
+      }
+      return phase;
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isIdle || !cinematicEnabled) {
+      setRevealPhase(isIdle ? "idle" : "settled");
+      setAxisOpacity(isIdle ? 0 : 1);
+      setPolygonsRevealed(!isIdle);
+      setMarkersRevealed(!isIdle);
+      setCinematicBasemap(null);
+      setPrePreviewReady(false);
+      cinematicDrivingRef.current = false;
+      return;
+    }
+    setRevealPhase("idle");
+    setAxisOpacity(0);
+    setPolygonsRevealed(false);
+    setMarkersRevealed(false);
+    setCinematicBasemap(null);
+    setPrePreviewReady(false);
+    cinematicDrivingRef.current = true;
+  }, [aoiId, cinematicEnabled, isIdle]);
+
+  // Warm Pre/Post preview PNGs during the fly (first request builds from GeoTIFF — often >1s).
+  useEffect(() => {
+    if (!aoiId) return;
+    let cancelled = false;
+    if (imagery?.pre) {
+      void prefetchImageryPreview(imageryPreviewUrl(aoiId, "pre")).then(() => {
+        if (!cancelled) setPrePreviewReady(true);
+      });
+    } else {
+      setPrePreviewReady(false);
+    }
+    if (imagery?.post) {
+      // Warm Post so the Pre → Post cut is not blocked on PNG generation.
+      void prefetchImageryPreview(imageryPreviewUrl(aoiId, "post"));
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [aoiId, imagery?.pre, imagery?.post]);
+
+  // Fly finished → lock Pre, fade in only after the preview is actually ready.
+  useEffect(() => {
+    if (!cinematicEnabled || !cinematicDrivingRef.current) return;
+    if (revealPhase !== "pre") return;
+    if (!readiness.canPre) return;
+
+    if (cinematicBasemap !== "pre") {
+      setCinematicBasemap("pre");
+      onBasemapChange("pre");
+    }
+
+    if (!prePreviewReady) {
+      setAxisOpacity(0);
+      return;
+    }
+
+    const cancel = animateOpacity(0, 1, IMAGERY_FADE_MS, setAxisOpacity);
+    return cancel;
+  }, [
+    revealPhase,
+    readiness.canPre,
+    cinematicEnabled,
+    cinematicBasemap,
+    onBasemapChange,
+    prePreviewReady,
+  ]);
+
+  // Hold Pre on-screen after it has loaded + faded, then switch to Post.
+  useEffect(() => {
+    if (!cinematicEnabled || !cinematicDrivingRef.current) return;
+    if (revealPhase !== "pre" || !readiness.canPre) return;
+    if (!readiness.canPost) return;
+    if (cinematicBasemap !== "pre") return;
+    if (!prePreviewReady) return;
+
+    const timer = window.setTimeout(() => {
+      setCinematicBasemap("post");
+      onBasemapChange("post");
+      setRevealPhase("post");
+      animateOpacity(0, 1, IMAGERY_FADE_MS, setAxisOpacity);
+    }, PRE_TO_POST_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    revealPhase,
+    readiness.canPre,
+    readiness.canPost,
+    cinematicEnabled,
+    cinematicBasemap,
+    onBasemapChange,
+    prePreviewReady,
+  ]);
+
+  // Post → polygons when footprints/damage layer is ready.
+  useEffect(() => {
+    if (!cinematicEnabled || !cinematicDrivingRef.current) return;
+    if (revealPhase !== "post") return;
+    if (!readiness.canPolygons) return;
+    const timer = window.setTimeout(() => {
+      setPolygonsRevealed(true);
+      setRevealPhase("polygons");
+    }, POST_TO_POLYGONS_MS);
+    return () => window.clearTimeout(timer);
+  }, [revealPhase, readiness.canPolygons, cinematicEnabled]);
+
+  // Late buildings after we already settled without them.
+  useEffect(() => {
+    if (!cinematicEnabled || !readiness.canPolygons || polygonsRevealed) return;
+    if (revealPhase !== "settled") return;
+    setPolygonsRevealed(true);
+  }, [readiness.canPolygons, cinematicEnabled, polygonsRevealed, revealPhase]);
+
+  useEffect(() => {
+    if (!cinematicEnabled) return;
+    if (revealPhase !== "polygons") return;
+    const markerId = window.setTimeout(() => {
+      setMarkersRevealed(true);
+      setRevealPhase("settled");
+      setCinematicBasemap(null);
+      cinematicDrivingRef.current = false;
+    }, MARKERS_AFTER_POLYGONS_MS);
+    return () => window.clearTimeout(markerId);
+  }, [revealPhase, cinematicEnabled]);
+
+  // Chat deep-links / focus should not wait for the cinematic sequence.
+  useEffect(() => {
+    if (!focusMap || !cinematicEnabled) return;
+    setPolygonsRevealed(true);
+    setMarkersRevealed(true);
+    setAxisOpacity(1);
+    setRevealPhase("settled");
+    setCinematicBasemap(null);
+    cinematicDrivingRef.current = false;
+  }, [focusMap, cinematicEnabled]);
 
   const priorityCells = useMemo(
     () =>
@@ -887,8 +1389,10 @@ export function MapPanel({
   );
 
   useEffect(() => {
-    if (!imageryReady || basemap === "street") return;
-    const option = basemapOptions.find((item) => item.id === basemap);
+    if (!imageryReady || effectiveBasemap === "street") return;
+    // While the cinematic sequence is driving Pre → Post, don't auto-correct basemap.
+    if (cinematicEnabled && cinematicBasemap) return;
+    const option = basemapOptions.find((item) => item.id === effectiveBasemap);
     if (option?.available) return;
     if (basemapOptions.find((item) => item.id === "pre")?.available) {
       onBasemapChange("pre");
@@ -897,13 +1401,47 @@ export function MapPanel({
     } else {
       onBasemapChange("street");
     }
-  }, [basemap, basemapOptions, imageryReady, onBasemapChange]);
+  }, [
+    effectiveBasemap,
+    basemapOptions,
+    imageryReady,
+    onBasemapChange,
+    cinematicEnabled,
+    cinematicBasemap,
+  ]);
 
-  const onImagery = basemap === "post" || basemap === "pre";
+  const onImagery = !isIdle && (effectiveBasemap === "post" || effectiveBasemap === "pre");
+  const imageryAvailable =
+    (effectiveBasemap === "pre" && Boolean(imagery?.pre)) ||
+    (effectiveBasemap === "post" && Boolean(imagery?.post));
   const imageryUrl =
-    onImagery && bounds
-      ? `/api/aois/${encodeURIComponent(aoiId)}/imagery/${basemap}`
+    onImagery && aoiId && bounds && imageryAvailable
+      ? `/api/aois/${encodeURIComponent(aoiId)}/imagery/${effectiveBasemap}`
       : null;
+
+  const showImageryOverlay =
+    Boolean(imageryUrl) &&
+    (!cinematicEnabled ||
+      (revealPhase === "pre" && readiness.canPre && prePreviewReady) ||
+      revealPhase === "post" ||
+      revealPhase === "polygons" ||
+      revealPhase === "settled");
+  const streetRefOpacity =
+    onImagery && showImageryOverlay ? STREET_REFERENCE_TILES.opacity * axisOpacity : 0;
+  const showMarkers = !isIdle && (!cinematicEnabled || markersRevealed || Boolean(focusMap));
+  /** Keep the chrome mounted so Street ↔ imagery can opacity-fade; stay put on Pre ↔ Post. */
+  const timelineMounted =
+    !isIdle && Boolean(bounds) && (Boolean(imagery?.pre) || Boolean(imagery?.post));
+  const timelineVisible =
+    timelineMounted &&
+    onImagery &&
+    showImageryOverlay &&
+    (!cinematicEnabled ||
+      revealPhase === "pre" ||
+      revealPhase === "post" ||
+      revealPhase === "polygons" ||
+      revealPhase === "settled");
+  const imageryCrossfade = onImagery && showImageryOverlay;
 
   const style = useMemo(
     () =>
@@ -916,9 +1454,12 @@ export function MapPanel({
     [onImagery],
   );
 
-  const mapCenter = center ?? (bounds
-    ? ([(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2] as [number, number])
-    : ([34.082889, -118.598699] as [number, number]));
+  const mapCenter = cinematicEnabled || isIdle
+    ? CONUS_CENTER
+    : (center ??
+      (bounds
+        ? ([(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2] as [number, number])
+        : CONUS_CENTER));
 
   const popoverAnchor = useMemo(() => {
     if (!regionSelection || !mapWrapRef.current) return null;
@@ -935,53 +1476,85 @@ export function MapPanel({
   return (
     <div>
       <div
-        className={`map-wrap ${regionSelectEnabled ? "map-region-select-active" : ""}`}
+        className={`map-wrap ${isIdle ? "map-wrap-idle" : ""} ${
+          regionSelectEnabled ? "map-region-select-active" : ""
+        } ${
+          cinematicEnabled && revealPhase !== "settled" ? "map-cinematic-active" : ""
+        }`}
         ref={mapWrapRef}
       >
         <MapContainer
           center={mapCenter}
-          zoom={15}
+          zoom={cinematicEnabled || isIdle ? CONUS_ZOOM : 15}
           style={{ height: "100%", width: "100%" }}
           attributionControl={false}
         >
           <MapResizeHandler />
-          <BuildingsPane />
-          <StreetOverlayPane />
-          <SituationPanes />
-          <BasemapControl basemap={basemap} options={basemapOptions} onChange={onBasemapChange} />
-          <RecenterAoiControl disabled={!bounds} onRecenter={handleRecenter} />
-          {bounds && <RecenterAoiView bounds={bounds} requestKey={recenterRequestKey} />}
-          <RegionSelectControl
-            enabled={regionSelectEnabled}
-            onToggle={toggleRegionSelect}
-            disabled={!buildingsGeojson}
+          <IdleConusSnap active={isIdle} />
+          <BuildingsPane revealed={!isIdle && polygonsRevealed && showBuildingPolygons} />
+          <PriorityPane revealed={!isIdle && priorityReveal.revealed} />
+          <StreetOverlayPane opacity={isIdle ? 0 : streetRefOpacity} />
+          <SituationPanes
+            weatherRevealed={!isIdle && weatherReveal.revealed}
+            roadsRevealed={!isIdle && roadsReveal.revealed}
           />
-          <BuildingsLayerControl
-            visible={showBuildingPolygons}
-            onToggle={toggleBuildingPolygons}
-            disabled={!buildingsGeojson}
-          />
-          <PriorityLayerControl
-            enabled={priorityVisible}
-            onToggle={togglePriority}
-            disabled={!priorityCells}
-          />
-          <SituationLayerControl
-            enabled={situationVisible}
-            onToggle={toggleSituation}
-            disabled={!situationWeather}
-          />
-          <SituationRoadControl
-            enabled={roadsVisible}
-            onToggle={toggleRoads}
-            disabled={!situationRoads}
-          />
-          <MapRegionSelect
-            enabled={regionSelectEnabled}
-            buildingsGeojson={buildingsGeojson ?? null}
-            onSelection={handleRegionSelection}
-          />
-          {onImagery && (
+          {!isIdle && (
+            <>
+              <BasemapControl
+                basemap={effectiveBasemap}
+                options={basemapOptions}
+                onChange={(id) => {
+                  if (cinematicBasemap) return;
+                  onBasemapChange(id);
+                }}
+              />
+              <BuildingScopeMapControl
+                value={buildingScope === "vlm" ? "official" : buildingScope}
+                onChange={(scope) => onBuildingScopeChange?.(scope)}
+                showFused={showFusedBuildingScope}
+                pending={buildingScopePending}
+              />
+              <RecenterAoiControl disabled={!bounds} onRecenter={handleRecenter} />
+              {bounds && <RecenterAoiView bounds={bounds} requestKey={recenterRequestKey} />}
+              <CinematicApproach
+                aoiId={aoiId}
+                bounds={bounds}
+                enabled={cinematicEnabled}
+                onPhase={handleRevealPhase}
+              />
+              <RegionSelectControl
+                enabled={regionSelectEnabled}
+                onToggle={toggleRegionSelect}
+                disabled={!buildingsGeojson}
+              />
+              <BuildingsLayerControl
+                visible={showBuildingPolygons}
+                onToggle={toggleBuildingPolygons}
+                disabled={!buildingsGeojson}
+              />
+              <PriorityLayerControl
+                enabled={priorityVisible}
+                onToggle={togglePriority}
+                disabled={!priorityCells}
+              />
+              <SituationLayerControl
+                enabled={situationVisible}
+                onToggle={toggleSituation}
+                disabled={!situationWeather}
+              />
+              <SituationRoadControl
+                enabled={roadsVisible}
+                onToggle={toggleRoads}
+                disabled={!situationRoads}
+              />
+              <MapRegionSelect
+                enabled={regionSelectEnabled}
+                buildingsGeojson={buildingsGeojson ?? null}
+                onSelection={handleRegionSelection}
+              />
+            </>
+          )}
+          {(isIdle || onImagery || (cinematicEnabled && effectiveBasemap !== "street")) && (
             <TileLayer
               key="context-satellite"
               url={CONTEXT_SATELLITE_TILES.url}
@@ -989,7 +1562,7 @@ export function MapPanel({
               maxZoom={CONTEXT_SATELLITE_TILES.maxZoom}
             />
           )}
-          {basemap === "street" && (
+          {!isIdle && effectiveBasemap === "street" && (
             <TileLayer
               key="street"
               url={STREET_TILES.url}
@@ -998,13 +1571,24 @@ export function MapPanel({
               maxZoom={STREET_TILES.maxZoom}
             />
           )}
-          {imageryUrl && bounds && imageryCorners && (
-            <RotatedImageryOverlay url={imageryUrl} corners={imageryCorners} />
+          {showImageryOverlay && imageryUrl && bounds && imageryCorners && (
+            <RotatedImageryOverlay
+              key={`${aoiId}-${effectiveBasemap}-rotated`}
+              url={imageryUrl}
+              corners={imageryCorners}
+              opacity={1}
+              fadeIn={imageryCrossfade}
+            />
           )}
-          {imageryUrl && bounds && !imageryCorners && (
-            <ImageOverlay url={imageryUrl} bounds={boundsToLeaflet(bounds)} opacity={1} zIndex={0} />
+          {showImageryOverlay && imageryUrl && bounds && !imageryCorners && (
+            <FadingImageOverlay
+              key={`${aoiId}-${effectiveBasemap}-box`}
+              url={imageryUrl}
+              bounds={boundsToLeaflet(bounds)}
+              opacity={axisOpacity}
+            />
           )}
-          {onImagery && (
+          {onImagery && showImageryOverlay && (
             <TileLayer
               key="street-reference"
               pane="streetOverlayPane"
@@ -1015,7 +1599,7 @@ export function MapPanel({
               opacity={STREET_REFERENCE_TILES.opacity}
             />
           )}
-          {situationWeather && situationVisible && (
+          {situationWeather && weatherReveal.mounted && (
             <>
               <SituationChoroplethLayer
                 weather={situationWeather}
@@ -1026,16 +1610,15 @@ export function MapPanel({
               <SituationWindLayer weather={situationWeather} hourIndex={hourIndex} />
             </>
           )}
-          {situationRoads && roadsVisible && <SituationRoadLayer roads={situationRoads} />}
-          {bounds && <FitBounds bounds={bounds} />}
+          {situationRoads && roadsReveal.mounted && <SituationRoadLayer roads={situationRoads} />}
           <FocusMapTarget
             focus={focusMap}
             markerRefs={markerRefs}
             buildingLayerRefs={buildingLayerRefs}
           />
-          {buildingsGeojson && showBuildingPolygons && (
+          {aoiId && buildingsGeojson && showBuildingPolygons && (
             <GeoJSON
-              key={`${aoiId}-${basemap}-${buildingScope}`}
+              key={`${aoiId}-${effectiveBasemap}-${buildingScope}`}
               data={buildingsGeojson}
               pane="buildingsPane"
               style={style}
@@ -1055,7 +1638,8 @@ export function MapPanel({
               }}
             />
           )}
-          {hospitals.map((hospital) => {
+          {showMarkers &&
+            hospitals.map((hospital) => {
             const coords =
               hospital.coordinates_wgs84 ??
               (hospital.latitude != null && hospital.longitude != null
@@ -1082,7 +1666,8 @@ export function MapPanel({
               </Marker>
             );
           })}
-          {focusMap?.kind === "hospital" &&
+          {showMarkers &&
+            focusMap?.kind === "hospital" &&
             !findHospitalForFocus(hospitals, focusMap) && (
               <Marker
                 key={`chat-focus-${focusMap.key}`}
@@ -1156,7 +1741,7 @@ export function MapPanel({
               </Popup>
             </Marker>
           )}
-          {priorityVisible &&
+          {priorityReveal.mounted &&
             (() => {
               const cells =
                 (focusMap?.kind === "region" && focusMap.cells && focusMap.cells.length > 0
@@ -1171,9 +1756,15 @@ export function MapPanel({
                         [focusMap.bounds_wgs84[1], focusMap.bounds_wgs84[0]],
                         [focusMap.bounds_wgs84[3], focusMap.bounds_wgs84[2]],
                       ]}
-                      pathOptions={priorityRegionStyle(focusMap.priority)}
+                      pathOptions={{ ...priorityRegionStyle(focusMap.priority), pane: "priorityPane" }}
+                      pane="priorityPane"
                     >
-                      <Tooltip permanent direction="center" className="priority-region-tooltip">
+                      <Tooltip
+                        permanent
+                        direction="center"
+                        pane="priorityLabelPane"
+                        className="priority-region-tooltip"
+                      >
                         <div className="priority-cell-label">{focusMap.name}</div>
                       </Tooltip>
                     </Rectangle>
@@ -1199,19 +1790,55 @@ export function MapPanel({
               );
             })()}
         </MapContainer>
-        {situationWeather && (
+        {timelineMounted && (
+          <div
+            className={`map-imagery-timeline ${
+              timelineVisible ? "map-imagery-timeline-visible" : ""
+            }`}
+            aria-hidden={!timelineVisible}
+          >
+            <div
+              className={`map-imagery-timeline-item ${
+                effectiveBasemap === "pre" ||
+                (cinematicEnabled && revealPhase === "pre")
+                  ? "active"
+                  : ""
+              }`}
+            >
+              <span className="map-imagery-timeline-label">Pre</span>
+              <span className="map-imagery-timeline-date">
+                {imageryTimeline?.pre?.trim() || "—"}
+              </span>
+            </div>
+            <div className="map-imagery-timeline-rule" />
+            <div
+              className={`map-imagery-timeline-item ${
+                effectiveBasemap === "post" &&
+                !(cinematicEnabled && revealPhase === "pre")
+                  ? "active"
+                  : ""
+              }`}
+            >
+              <span className="map-imagery-timeline-label">Post</span>
+              <span className="map-imagery-timeline-date">
+                {imageryTimeline?.post?.trim() || "—"}
+              </span>
+            </div>
+          </div>
+        )}
+        {situationWeather && weatherReveal.mounted && (
           <SituationOverlay
             weather={situationWeather}
             hourIndex={hourIndex}
             onHourChange={setHourIndex}
-            visible={situationVisible}
+            visible={weatherReveal.revealed}
           />
         )}
-        {situationRoads && (
+        {situationRoads && roadsReveal.mounted && (
           <SituationRoadChip
             roads={situationRoads}
-            visible={roadsVisible}
-            withTimeline={Boolean(situationWeather && situationVisible)}
+            visible={roadsReveal.revealed}
+            withTimeline={Boolean(situationWeather && weatherReveal.revealed)}
           />
         )}
         {regionSelection && popoverAnchor && (
@@ -1221,79 +1848,89 @@ export function MapPanel({
             onClose={clearRegionSelection}
           />
         )}
+        {isIdle && <p className="map-idle-caption">{idleCaption}</p>}
       </div>
-      <div className="legend">
-        {[
-          ["no_damage", "No damage"],
-          ["minor", "Minor"],
-          ["major", "Major"],
-          ["destroyed", "Destroyed"],
-        ].map(([label, text]) => (
-          <span className="legend-item" key={label}>
-            <span className="legend-swatch" style={{ background: damageColor(label) }} />
-            {text}
-          </span>
-        ))}
-        {onImagery && (
-          <span className="legend-item" style={{ marginLeft: "0.5rem", color: "#64748b" }}>
-            AOI: {basemap === "post" ? "Post-disaster (NOAA ERI)" : "Pre-disaster (Maxar)"} · streets:
-            OSM/CARTO · context: Esri
-          </span>
-        )}
-      </div>
-      <p className="map-scope-note">
-        Building layer: <strong>{BUILDING_SCOPE_LABELS[buildingScope]}</strong>
-        {" — "}
-        {BUILDING_SCOPE_HINTS[buildingScope]}
-        {regionSelectEnabled && (
-          <>
-            {" · "}
-            <strong>Select area:</strong> drag on the map to summarize damage in the box
-          </>
-        )}
-        {!showBuildingPolygons && (
-          <>
-            {" · "}
-            <strong>Polygons hidden</strong>
-          </>
-        )}
-        {situationWeather && situationVisible && (
-          <>
-            {" · "}
-            <strong>Situation layer</strong> — Temp wash + humidity labels + timeline scrub
-          </>
-        )}
-        {situationRoads && roadsVisible && (
-          <>
-            {" · "}
-            <strong>Road conditions</strong> — closures / lane restrictions
-          </>
-        )}
-        {situationLoading && (
-          <>
-            {" · "}
-            Loading situation forecast…
-          </>
-        )}
-        {situationRoadsLoading && (
-          <>
-            {" · "}
-            Loading road conditions…
-          </>
-        )}
-        {situationError && !situationWeather && (
-          <>
-            {" · "}
-            Situation forecast unavailable
-          </>
-        )}
-        {situationRoadsError && !situationRoads && (
-          <>
-            {" · "}
-            Road conditions unavailable
-          </>
-        )}
-      </p>
+      {!isIdle && (
+        <>
+          <div className="legend">
+            {[
+              ["no_damage", "No damage"],
+              ["minor", "Minor"],
+              ["major", "Major"],
+              ["destroyed", "Destroyed"],
+            ].map(([label, text]) => (
+              <span className="legend-item" key={label}>
+                <span className="legend-swatch" style={{ background: damageColor(label) }} />
+                {text}
+              </span>
+            ))}
+            {onImagery && (
+              <span className="legend-item" style={{ marginLeft: "0.5rem", color: "#64748b" }}>
+                AOI:{" "}
+                {effectiveBasemap === "post" ? "Post-disaster (NOAA ERI)" : "Pre-disaster (Maxar)"} ·
+                streets: OSM/CARTO · context: Esri
+              </span>
+            )}
+          </div>
+          <p className="map-scope-note">
+            <strong>
+              {buildingScope === "fused"
+                ? "Official+"
+                : buildingScope === "vlm"
+                  ? "VLM"
+                  : "Official"}
+            </strong>
+            {regionSelectEnabled && (
+              <>
+                {" · "}
+                <strong>Select area</strong>
+              </>
+            )}
+            {!showBuildingPolygons && (
+              <>
+                {" · "}
+                <strong>Polygons off</strong>
+              </>
+            )}
+            {situationWeather && situationVisible && (
+              <>
+                {" · "}
+                <strong>Weather</strong>
+              </>
+            )}
+            {situationRoads && roadsVisible && (
+              <>
+                {" · "}
+                <strong>Roads</strong>
+              </>
+            )}
+            {situationLoading && (
+              <>
+                {" · "}
+                Weather…
+              </>
+            )}
+            {situationRoadsLoading && (
+              <>
+                {" · "}
+                Roads…
+              </>
+            )}
+            {situationError && !situationWeather && (
+              <>
+                {" · "}
+                Weather unavailable
+              </>
+            )}
+            {situationRoadsError && !situationRoads && (
+              <>
+                {" · "}
+                Roads unavailable
+              </>
+            )}
+          </p>
+        </>
+      )}
     </div>
   );
 }
