@@ -787,8 +787,8 @@ export default function App() {
         <div>
           <h1>RapidResponseAgent</h1>
           <p>
-            Locally deployed AI agent system on open models for post-disaster
-            assessment · Author:{" "}
+            <strong>Locally deployed AI agent system</strong> on open models for
+            post-disaster assessment · Author:{" "}
             <a href="https://feizhao19.github.io/" target="_blank" rel="noreferrer" className="app-header-author">
               Dr. Fei Zhao
             </a>
