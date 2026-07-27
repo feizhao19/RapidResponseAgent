@@ -195,7 +195,9 @@ export default function App() {
     if (!selectedAoiId) return;
 
     let cancelled = false;
-    setDetail(null);
+    // Soft clear: drop the previous AOI only after we've committed to the new id,
+    // without forcing a synchronous blank frame when the id is unchanged.
+    setDetail((current) => (current?.aoi_id === selectedAoiId ? current : null));
     setBuildingsLoading(!buildingsCache[selectedAoiId]);
 
     const buildingsPromise = buildingsCache[selectedAoiId]
@@ -215,7 +217,12 @@ export default function App() {
         if (!cancelled && detailResult.status === "fulfilled") {
           setDetail(detailResult.value);
         } else if (!cancelled && detailResult.status === "rejected") {
-          setError(detailResult.reason instanceof Error ? detailResult.reason.message : "Failed to load AOI");
+          // Incomplete / still-aligning AOIs are not detail-ready yet; keep CONUS idle.
+          const reason =
+            detailResult.reason instanceof Error ? detailResult.reason.message : "";
+          if (reason && !/404|not found/i.test(reason)) {
+            setError(reason || "Failed to load AOI");
+          }
         }
       })
       .finally(() => {
@@ -459,6 +466,63 @@ export default function App() {
       const job = await getAssessmentJob(jobId);
       setSessions((prev) => patchSession(prev, sessionId, { activeJob: job }));
       syncProgressMessage(job);
+      if (job.aoi_id) {
+        setSelectedAoiId((current) => current || job.aoi_id!);
+        // Once align has written data/aligned/<aoi_id>, detail/imagery unlock for the map.
+        const alignedReady = Boolean(job.aligned_dir) || ["queued", "running", "completed"].includes(
+          String(job.status),
+        );
+        if (alignedReady || job.status === "aligning") {
+          try {
+            const partial = await getAoiDetail(job.aoi_id);
+            setDetail((current) => {
+              if (!current || current.aoi_id !== partial.aoi_id) return partial;
+              const sameBounds =
+                JSON.stringify(current.imagery_bounds_wgs84 ?? null) ===
+                JSON.stringify(partial.imagery_bounds_wgs84 ?? null);
+              const sameCorners =
+                JSON.stringify(current.imagery_corners_wgs84 ?? null) ===
+                JSON.stringify(partial.imagery_corners_wgs84 ?? null);
+              const sameImagery =
+                Boolean(current.imagery?.pre) === Boolean(partial.imagery?.pre) &&
+                Boolean(current.imagery?.post) === Boolean(partial.imagery?.post);
+              const sameDates =
+                JSON.stringify(current.imagery_dates ?? null) ===
+                JSON.stringify(partial.imagery_dates ?? null);
+              if (sameBounds && sameCorners && sameImagery && sameDates) {
+                return {
+                  ...partial,
+                  imagery_bounds_wgs84: current.imagery_bounds_wgs84,
+                  imagery_corners_wgs84: current.imagery_corners_wgs84,
+                  imagery: current.imagery,
+                  imagery_dates: current.imagery_dates,
+                };
+              }
+              return partial;
+            });
+          } catch {
+            // Detail unlocks after align writes meta.json under data/aligned/<aoi_id>.
+          }
+        }
+        const done = new Set([
+          ...(job.completed_steps ?? []),
+          ...(job.progress?.completed_steps ?? []),
+        ]);
+        if (
+          alignedReady ||
+          done.has("fusion") ||
+          done.has("footprints") ||
+          done.has("perception") ||
+          done.has("visualization")
+        ) {
+          try {
+            const geojson = await getBuildingsGeoJson(job.aoi_id);
+            setBuildingsCache((prev) => ({ ...prev, [job.aoi_id!]: geojson }));
+          } catch {
+            // Buildings unlock after footprints/fusion.
+          }
+        }
+      }
       if (terminal.has(job.status)) {
         if (job.status === "completed" && job.aoi_id) {
           try {
@@ -536,6 +600,9 @@ export default function App() {
         message: input.message,
       });
       setSessions((prev) => patchSession(prev, sessionId, { activeJob: job }));
+      if (job.aoi_id) {
+        setSelectedAoiId(job.aoi_id);
+      }
       setSessions((prev) =>
         upsertSessionMessage(prev, sessionId, {
           id: progressId,
@@ -744,32 +811,31 @@ export default function App() {
             />
           }
           right={
-            selectedAoiId ? (
-              <DetailScrollView
-                aoiId={selectedAoiId}
-                detail={detail?.aoi_id === selectedAoiId ? detail : null}
-                bounds={bounds}
-                imageryCorners={
-                  detail?.aoi_id === selectedAoiId ? (detail.imagery_corners_wgs84 ?? null) : null
-                }
-                buildingsGeojson={buildingsCache[selectedAoiId] ?? null}
-                detectedExtraCount={selectedRecord?.summary?.buildings_detected}
-                detailLoading={!detail || detail.aoi_id !== selectedAoiId}
-                mapCenter={mapCenter}
-                hospitals={mapFacilities}
-                externalMapFocus={chatMapFocus}
-                onClearExternalMapFocus={() => setChatMapFocus(null)}
-                onRunVlm={handleRunVlm}
-                onStopVlm={handleStopVlm}
-                onVlmPreference={handleVlmPreference}
-                vlmJob={vlmJob}
-                vlmBusy={vlmBusy}
-              />
-            ) : (
-              <div className="detail-panel detail-panel-empty">
-                <p>Select an AOI to view assessment details.</p>
-              </div>
-            )
+            <DetailScrollView
+              aoiId={selectedAoiId || null}
+              detail={detail?.aoi_id === selectedAoiId ? detail : null}
+              bounds={bounds}
+              imageryCorners={
+                detail?.aoi_id === selectedAoiId ? (detail.imagery_corners_wgs84 ?? null) : null
+              }
+              buildingsGeojson={selectedAoiId ? (buildingsCache[selectedAoiId] ?? null) : null}
+              detectedExtraCount={selectedRecord?.summary?.buildings_detected}
+              detailLoading={Boolean(selectedAoiId) && (!detail || detail.aoi_id !== selectedAoiId)}
+              mapCenter={mapCenter}
+              hospitals={mapFacilities}
+              externalMapFocus={chatMapFocus}
+              onClearExternalMapFocus={() => setChatMapFocus(null)}
+              onRunVlm={handleRunVlm}
+              onStopVlm={handleStopVlm}
+              onVlmPreference={handleVlmPreference}
+              vlmJob={vlmJob}
+              vlmBusy={vlmBusy}
+              assessmentJob={
+                activeSession?.activeJob?.aoi_id === selectedAoiId
+                  ? activeSession.activeJob
+                  : null
+              }
+            />
           }
         />
         {buildingsLoading && selectedAoiId && !buildingsCache[selectedAoiId] && (
