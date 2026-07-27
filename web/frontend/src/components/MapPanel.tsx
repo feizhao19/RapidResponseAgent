@@ -452,21 +452,29 @@ function FocusMapTarget({
 }) {
   const map = useMap();
   const lastFocusKeyRef = useRef<number | null>(null);
+  /** Same AOI overview for P1/P2/P3 — don't re-fly (causes camera wobble). */
+  const lastRegionOverviewRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!focus) {
       lastFocusKeyRef.current = null;
+      lastRegionOverviewRef.current = null;
       return;
     }
     // Only fly once per focus request — re-renders / layout tweaks must not yank the view back.
     if (lastFocusKeyRef.current === focus.key) return;
     lastFocusKeyRef.current = focus.key;
 
-    map.invalidateSize({ pan: false });
-
     if (focus.kind === "region") {
       const overview = focus.aoiBounds ?? focus.bounds_wgs84;
+      const overviewKey = overview.join(",");
+      // Switching Priority 1→2→3 only changes the highlighted cell; keep the camera still.
+      if (lastRegionOverviewRef.current === overviewKey) {
+        return;
+      }
+      lastRegionOverviewRef.current = overviewKey;
       const [west, south, east, north] = overview;
+      map.invalidateSize({ pan: false });
       map.flyToBounds(
         [
           [south, west],
@@ -481,6 +489,9 @@ function FocusMapTarget({
       );
       return;
     }
+
+    lastRegionOverviewRef.current = null;
+    map.invalidateSize({ pan: false });
 
     if (focus.kind === "weather") {
       if (focus.aoiBounds) {
@@ -1541,11 +1552,13 @@ export function MapPanel({
                 enabled={situationVisible}
                 onToggle={toggleSituation}
                 disabled={!situationWeather}
+                loading={situationLoading && !situationWeather}
               />
               <SituationRoadControl
                 enabled={roadsVisible}
                 onToggle={toggleRoads}
                 disabled={!situationRoads}
+                loading={situationRoadsLoading && !situationRoads}
               />
               <MapRegionSelect
                 enabled={regionSelectEnabled}
@@ -1774,7 +1787,7 @@ export function MapPanel({
               }
               return (
                 <PriorityGridOverlay
-                  key={`priority-overlay-${focusMap?.kind === "region" ? focusMap.key : "layer"}`}
+                  key="priority-overlay"
                   cells={cells}
                   focus={
                     focusMap?.kind === "region"

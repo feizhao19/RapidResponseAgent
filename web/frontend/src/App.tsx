@@ -81,7 +81,7 @@ const DETAIL_REFRESH_TOOLS = new Set([
   "find_nearest_hospitals",
   "get_mission_priority",
   "situation_roads",
-  "situation_weather",
+  "weather_context",
   "get_aoi_stats",
   "get_damage_summary",
 ]);
@@ -112,6 +112,9 @@ export default function App() {
   const [llmModel, setLlmModel] = useState<LlmModelId>(readStoredLlmModel);
   const [error, setError] = useState<string | null>(null);
   const [chatMapFocus, setChatMapFocus] = useState<MapFocus | null>(null);
+  /** Bumped after chat warms weather/roads so map controls re-fetch the cache. */
+  const [weatherRefreshKey, setWeatherRefreshKey] = useState(0);
+  const [roadsRefreshKey, setRoadsRefreshKey] = useState(0);
   const [vlmJob, setVlmJob] = useState<AssessmentJob | null>(null);
   const [vlmBusy, setVlmBusy] = useState(false);
   const askAbortRef = useRef<AbortController | null>(null);
@@ -408,6 +411,15 @@ export default function App() {
         } catch {
           // Detail refresh is best-effort; the chat answer already succeeded.
         }
+      }
+      // Weather/roads map buttons read separate situation endpoints. Chat often
+      // finishes (and caches) first while the map's initial GET is still slow —
+      // re-fetch so Weather/Roads enable promptly from the warm cache.
+      if (aoiToRefresh && tools.includes("weather_context")) {
+        setWeatherRefreshKey((key) => key + 1);
+      }
+      if (aoiToRefresh && tools.includes("situation_roads")) {
+        setRoadsRefreshKey((key) => key + 1);
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -825,6 +837,8 @@ export default function App() {
               hospitals={mapFacilities}
               externalMapFocus={chatMapFocus}
               onClearExternalMapFocus={() => setChatMapFocus(null)}
+              weatherRefreshKey={weatherRefreshKey}
+              roadsRefreshKey={roadsRefreshKey}
               onRunVlm={handleRunVlm}
               onStopVlm={handleStopVlm}
               onVlmPreference={handleVlmPreference}

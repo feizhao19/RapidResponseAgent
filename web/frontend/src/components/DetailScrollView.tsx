@@ -73,6 +73,12 @@ type Props = {
   vlmBusy?: boolean;
   /** Active assessment job for this AOI — drives progressive map reveal. */
   assessmentJob?: AssessmentJob | null;
+  /**
+   * Bumped when chat finishes weather_context / situation_roads so the map
+   * re-reads the warm situation cache instead of waiting on a stale in-flight GET.
+   */
+  weatherRefreshKey?: number;
+  roadsRefreshKey?: number;
 };
 
 function DetailSection({
@@ -149,6 +155,8 @@ export function DetailScrollView({
   vlmJob = null,
   vlmBusy = false,
   assessmentJob = null,
+  weatherRefreshKey = 0,
+  roadsRefreshKey = 0,
 }: Props) {
   const isActive = Boolean(aoiId);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -173,17 +181,24 @@ export function DetailScrollView({
   const [situationRoads, setSituationRoads] = useState<SituationRoads | null>(null);
   const [situationRoadsLoading, setSituationRoadsLoading] = useState(false);
   const [situationRoadsError, setSituationRoadsError] = useState<string | null>(null);
+  const situationWeatherAoiRef = useRef<string | null>(null);
+  const situationRoadsAoiRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!aoiId) {
+      situationWeatherAoiRef.current = null;
       setSituationWeather(null);
       setSituationError(null);
       setSituationLoading(false);
       return;
     }
+    const aoiChanged = situationWeatherAoiRef.current !== aoiId;
+    situationWeatherAoiRef.current = aoiId;
     let cancelled = false;
-    setSituationWeather(null);
-    setSituationError(null);
+    if (aoiChanged) {
+      setSituationWeather(null);
+      setSituationError(null);
+    }
     setSituationLoading(true);
     getSituationWeather(aoiId)
       .then((payload) => {
@@ -194,7 +209,7 @@ export function DetailScrollView({
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setSituationWeather(null);
+          if (aoiChanged) setSituationWeather(null);
           setSituationError(err instanceof Error ? err.message : "situation_unavailable");
         }
       })
@@ -204,18 +219,23 @@ export function DetailScrollView({
     return () => {
       cancelled = true;
     };
-  }, [aoiId]);
+  }, [aoiId, weatherRefreshKey]);
 
   useEffect(() => {
     if (!aoiId) {
+      situationRoadsAoiRef.current = null;
       setSituationRoads(null);
       setSituationRoadsError(null);
       setSituationRoadsLoading(false);
       return;
     }
+    const aoiChanged = situationRoadsAoiRef.current !== aoiId;
+    situationRoadsAoiRef.current = aoiId;
     let cancelled = false;
-    setSituationRoads(null);
-    setSituationRoadsError(null);
+    if (aoiChanged) {
+      setSituationRoads(null);
+      setSituationRoadsError(null);
+    }
     setSituationRoadsLoading(true);
     getSituationRoads(aoiId)
       .then((payload) => {
@@ -226,7 +246,7 @@ export function DetailScrollView({
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setSituationRoads(null);
+          if (aoiChanged) setSituationRoads(null);
           setSituationRoadsError(err instanceof Error ? err.message : "roads_unavailable");
         }
       })
@@ -236,7 +256,7 @@ export function DetailScrollView({
     return () => {
       cancelled = true;
     };
-  }, [aoiId]);
+  }, [aoiId, roadsRefreshKey]);
 
   const showVlmSection = Boolean(aoiId && detail?.aoi_id === aoiId);
 
@@ -383,7 +403,13 @@ export function DetailScrollView({
     if (!container || !element) return;
 
     const top = scrollOffsetInContainer(container, element);
-    container.scrollTo({ top: Math.max(0, top - 8), behavior: "smooth" });
+    const target = Math.max(0, top - 8);
+    // Already on this section — avoid smooth-scroll micro-jitter on every map deep-link.
+    if (Math.abs(container.scrollTop - target) < 12) {
+      setActiveSection(id);
+      return;
+    }
+    container.scrollTo({ top: target, behavior: "smooth" });
     setActiveSection(id);
   }
 

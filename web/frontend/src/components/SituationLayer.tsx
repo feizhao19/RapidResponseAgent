@@ -160,15 +160,20 @@ type ControlProps = {
   enabled: boolean;
   onToggle: () => void;
   disabled?: boolean;
+  loading?: boolean;
 };
 
-export function SituationLayerControl({ enabled, onToggle, disabled }: ControlProps) {
+export function SituationLayerControl({ enabled, onToggle, disabled, loading }: ControlProps) {
   useMapGlassToggle({
     className: "leaflet-situation-weather-control",
     label: "Weather",
     labelOff: "Weather off",
     titleOn: "Hide wind / humidity / temperature situation layer",
-    titleOff: "Show wind / humidity / temperature situation layer",
+    titleOff: loading
+      ? "Loading weather…"
+      : disabled
+        ? "Weather unavailable until data loads"
+        : "Show wind / humidity / temperature situation layer",
     active: enabled,
     onToggle,
     disabled,
@@ -176,13 +181,17 @@ export function SituationLayerControl({ enabled, onToggle, disabled }: ControlPr
   return null;
 }
 
-export function SituationRoadControl({ enabled, onToggle, disabled }: ControlProps) {
+export function SituationRoadControl({ enabled, onToggle, disabled, loading }: ControlProps) {
   useMapGlassToggle({
     className: "leaflet-situation-roads-control",
     label: "Roads",
     labelOff: "Roads off",
     titleOn: "Hide road closures and CHP incidents",
-    titleOff: "Show road closures and CHP incidents",
+    titleOff: loading
+      ? "Loading road conditions…"
+      : disabled
+        ? "Roads unavailable until data loads"
+        : "Show road closures and CHP incidents",
     active: enabled,
     onToggle,
     disabled,
