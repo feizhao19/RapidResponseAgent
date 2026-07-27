@@ -132,6 +132,12 @@ def parse_args():
         default=512,
         help="Tile stride when --sliding-window is set (512 = 50%% overlap for 1024 tiles).",
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=4,
+        help="Tiles per forward pass in sliding-window mode (OOM auto-splits). Default: 4.",
+    )
     return parser.parse_args()
 
 
@@ -229,7 +235,7 @@ def main():
         log_step(
             3,
             "Sliding window",
-            f"tile={args.tile_size} stride={args.stride} model_input={args.img_size}",
+            f"tile={args.tile_size} stride={args.stride} batch={args.batch_size} model_input={args.img_size}",
         )
         log_step(4, "Predicting", f"logit averaging across tiles ({runtime_precision})")
         infer_started = time.time()
@@ -246,6 +252,7 @@ def main():
             pixel_std=pixel_std,
             use_fp16=use_fp16,
             forward_fn=run_forward,
+            batch_size=args.batch_size,
         )
         infer_seconds = time.time() - infer_started
         print(
