@@ -22,6 +22,43 @@ class NearestFacilitiesTests(unittest.TestCase):
         self.assertEqual(detect_facility_kind("附近有没有消防站"), "fire_station")
         self.assertEqual(detect_facility_kind("避难所在哪里"), "shelter")
 
+    def test_incomplete_markdown_link_detection(self) -> None:
+        from geoagent.runtime.tools import _has_incomplete_markdown_link
+
+        self.assertTrue(
+            _has_incomplete_markdown_link(
+                "Other nearby hospitals\n"
+                "[West Los Angeles Veterans Affairs Medical Center](#"
+            )
+        )
+        self.assertTrue(
+            _has_incomplete_markdown_link(
+                "[UCLA](#map-hospital?lon=-118.48&lat=34.02&name=UCLA"
+            )
+        )
+        self.assertFalse(
+            _has_incomplete_markdown_link(
+                "- [UCLA](#map-facility?lon=-118.48&lat=34.02&name=UCLA&kind=hospital) — 4.85 mi"
+            )
+        )
+
+    def test_other_than_hospitals_resolves_non_hospital_kinds(self) -> None:
+        from geoagent.tools.nearest_facilities import (
+            resolve_facility_kinds,
+            wants_facilities_excluding_hospitals,
+        )
+
+        q = "Can we find any nearby facilities other than hospitals?"
+        self.assertTrue(wants_facilities_excluding_hospitals(q))
+        self.assertIsNone(detect_facility_kind(q))
+        kinds = resolve_facility_kinds(q, slots={"facility_kind": "all"})
+        self.assertEqual(kinds, ["fire_station", "police", "shelter"])
+        self.assertNotIn("hospital", kinds)
+
+        route = route_message(q)
+        self.assertEqual(route.l2, "facilities")
+        self.assertEqual(route.tools(), ["find_nearest_facilities"])
+
     def test_routes_fire_to_facilities_tool(self) -> None:
         route = route_message("where is the nearest fire station?")
         self.assertEqual(route.l2, "facilities")
@@ -146,9 +183,9 @@ class NearestFacilitiesTests(unittest.TestCase):
             "disclaimer": "OSM disclaimer",
         }
         md = _format_facilities_markdown("demo", payload, limit=3)
-        self.assertIn("1. [H1]", md)
-        self.assertIn("2. [H2]", md)
-        self.assertIn("3. [H3]", md)
+        self.assertIn("- [H1]", md)
+        self.assertIn("- [H2]", md)
+        self.assertIn("- [H3]", md)
         self.assertIn("1.0 mi", md)
         self.assertIn("0.2 mi", md)
         self.assertIn("Only 1 fire stations found", md)
@@ -171,20 +208,24 @@ class NearestFacilitiesTests(unittest.TestCase):
                 },
             },
         }
-        shelter_ok = {
-            "status": "ok",
-            "facility_kind": "shelter",
-            "facilities": [{"name": "S1", "distance_mi": 0.3}],
-            "nearest": {"name": "S1", "distance_mi": 0.3},
-        }
 
-        def fake_find(kind, **kwargs):
-            self.assertEqual(kind, "shelter")
-            return shelter_ok
+        def fake_multi(kinds, lat, lon, **kwargs):
+            self.assertEqual(list(kinds), ["shelter"])
+            return {
+                "shelter": [
+                    {
+                        "kind": "shelter",
+                        "name": "S1",
+                        "distance_km": 0.5,
+                        "distance_mi": 0.3,
+                        "coordinates_wgs84": [-118.55, 34.06],
+                    }
+                ]
+            }
 
         with patch(
-            "geoagent.tools.nearest_facilities.find_nearest_facilities",
-            side_effect=fake_find,
+            "geoagent.tools.nearest_facilities.fetch_facilities_overpass_multi",
+            side_effect=fake_multi,
         ):
             updated = refresh_unavailable_facility_kinds(
                 payload,
@@ -195,6 +236,27 @@ class NearestFacilitiesTests(unittest.TestCase):
         self.assertEqual(updated["by_kind"]["shelter"]["status"], "ok")
         self.assertEqual(updated["by_kind"]["hospital"]["status"], "ok")
         self.assertEqual(updated["by_kind"]["shelter"]["nearest"]["name"], "S1")
+
+    def test_overpass_query_uses_nwr_and_combined(self) -> None:
+        from geoagent.tools.nearest_facilities import (
+            build_combined_overpass_query,
+            build_overpass_query,
+        )
+
+        q = build_overpass_query("hospital", 34.08, -118.60, radius_m=5000)
+        self.assertIn('nwr["amenity"="hospital"](around:5000,', q)
+        self.assertNotIn("node[", q)
+        self.assertIn("out center tags;", q)
+
+        combined = build_combined_overpass_query(
+            ["hospital", "fire_station"],
+            34.08,
+            -118.60,
+            radius_m=8000,
+        )
+        self.assertIn('nwr["amenity"="hospital"]', combined)
+        self.assertIn('nwr["amenity"="fire_station"]', combined)
+        self.assertIn("[timeout:30]", combined)
 
     def test_combined_payload_detects_unavailable_kind(self) -> None:
         from geoagent.tools.nearest_facilities import combined_payload_has_unavailable_kind
@@ -309,6 +371,74 @@ class NearestFacilitiesTests(unittest.TestCase):
         self.assertIn("[Sunset & Carey](#map-", polished)
         self.assertIn("0.27 mi", polished)
         self.assertIn("Here are the nearest facilities", polished)
+
+    def test_ensure_facility_answer_rebuilds_run_on_paragraph_as_bullets(self) -> None:
+        from geoagent.runtime.tools import ensure_facility_answer
+
+        payload = {
+            "aoi_id": "demo",
+            "facility_kind": "all",
+            "by_kind": {
+                "hospital": {
+                    "status": "ok",
+                    "hospitals": [
+                        {
+                            "name": "UCLA Medical Center - Santa Monica",
+                            "distance_mi": 4.85,
+                            "coordinates_wgs84": [-118.48, 34.02],
+                            "phone": "+1 424 259 6000",
+                        },
+                        {
+                            "name": "Providence Saint John's Health Center",
+                            "distance_mi": 5.19,
+                            "coordinates_wgs84": [-118.48, 34.03],
+                        },
+                    ],
+                },
+                "fire_station": {
+                    "status": "ok",
+                    "facilities": [
+                        {
+                            "name": "Los Angeles Fire Department Fire Station 23",
+                            "distance_mi": 0.83,
+                            "coordinates_wgs84": [-118.55, 34.05],
+                        }
+                    ],
+                },
+                "police": {"status": "ok", "facilities": []},
+                "shelter": {
+                    "status": "ok",
+                    "facilities": [
+                        {
+                            "name": "Sunset & Castellammare",
+                            "distance_mi": 0.88,
+                            "coordinates_wgs84": [-118.55, 34.04],
+                        }
+                    ],
+                },
+            },
+        }
+        # Mimic the collapsed LLM output the user reported.
+        draft = (
+            "Nearby Facilities\n\n"
+            "Hospitals\n"
+            "UCLA Medical Center - Santa Monica — 4.85 mi +1 424 259 6000 "
+            "Providence Saint John's Health Center — 5.19 mi\n\n"
+            "Fire Stations\n"
+            "Los Angeles Fire Department Fire Station 23 — 0.83 mi\n\n"
+            "Shelters\n"
+            "Sunset & Castellammare — 0.88 mi\n"
+        )
+        polished = ensure_facility_answer(draft, payload, limit=3)
+        self.assertIn("- [UCLA Medical Center - Santa Monica](#map-", polished)
+        self.assertIn("- [Providence Saint John's Health Center](#map-", polished)
+        self.assertIn("- [Los Angeles Fire Department Fire Station 23](#map-", polished)
+        self.assertIn("- [Sunset & Castellammare](#map-", polished)
+        # Facilities must not remain jammed onto one non-bullet line.
+        self.assertNotRegex(
+            polished,
+            r"UCLA Medical Center - Santa Monica.*Providence Saint John's Health Center",
+        )
 
     def test_unnamed_facilities_ranked_after_named(self) -> None:
         from geoagent.runtime.tools import _facility_list_items, _format_facilities_markdown

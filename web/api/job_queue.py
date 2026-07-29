@@ -29,7 +29,7 @@ class PipelineWorkItem:
     session_id: str | None = None
     kind: JobKind = "pipeline"
     vlm_mode: VlmReviewMode = "both"
-    vlm_limit: int = 2
+    vlm_limit: int = 10
     vlm_damaged_only: bool = True
     skip_facilities: bool = True
 
@@ -71,7 +71,7 @@ def enqueue_pipeline_job(
     session_id: str | None = None,
     kind: JobKind = "pipeline",
     vlm_mode: VlmReviewMode = "both",
-    vlm_limit: int = 2,
+    vlm_limit: int = 10,
     vlm_damaged_only: bool = True,
     skip_facilities: bool = True,
 ) -> int:

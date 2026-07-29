@@ -23,6 +23,9 @@ type Props = {
 
 type TabId = "discrepancy" | "damage";
 
+/** UI label "All" — practical VLM case cap (not unlimited). */
+export const VLM_ALL_LIMIT = 10;
+
 const KIND_LABELS: Record<string, string> = {
   fp_orphan: "ViPDE outside official map",
   fn_inferred: "Official footprint, weak ViPDE",
@@ -355,8 +358,8 @@ export function VlmArbitrationPanel({
 
   const [tab, setTab] = useState<TabId | null>(null);
   const [damagedOnly, setDamagedOnly] = useState(true);
-  // 0 = review all matching candidates
-  const [limitChoice, setLimitChoice] = useState<number>(2);
+  // "All" is the default UI choice; it maps to a practical cap of 10 VLM cases.
+  const [limitChoice, setLimitChoice] = useState<number>(VLM_ALL_LIMIT);
   const activeTab = tab && availableTabs.some((item) => item.id === tab)
     ? tab
     : availableTabs[0]?.id ?? null;
@@ -419,7 +422,7 @@ export function VlmArbitrationPanel({
             <option value="8">8</option>
             <option value="16">16</option>
             <option value="32">32</option>
-            <option value="0">All</option>
+            <option value={String(VLM_ALL_LIMIT)}>All</option>
           </select>
         </label>
         <label className="vlm-run-option">
@@ -441,14 +444,17 @@ export function VlmArbitrationPanel({
             jobCancelled ? " vlm-run-status-cancelled" : ""
           }`}
         >
-          {jobRunning
-            ? "Running… "
-            : jobFailed
-              ? "Failed — "
-              : jobCancelled
-                ? "Stopped — "
-                : "Done — "}
-          {vlmJob.message || vlmJob.status}
+          {(() => {
+            const detail = (vlmJob.message || vlmJob.status || "").trim();
+            const detailLooksLive = /^(running|queued|aligning)\b/i.test(detail);
+            if (jobRunning) {
+              // Job messages often already start with "Running…" — avoid "Running… Running…".
+              return detailLooksLive ? detail : detail ? `Running… ${detail}` : "Running…";
+            }
+            if (jobFailed) return detail ? `Failed — ${detail}` : "Failed";
+            if (jobCancelled) return detail ? `Stopped — ${detail}` : "Stopped";
+            return detail ? `Done — ${detail}` : "Done";
+          })()}
           {vlmJob.errors?.length ? `: ${vlmJob.errors[0]}` : null}
         </p>
       )}

@@ -733,7 +733,7 @@ export default function App() {
     try {
       const job = await startVlmReview(selectedAoiId, {
         mode,
-        limit: options?.limit ?? 2,
+        limit: options?.limit ?? 10,
         damagedOnly: options?.damagedOnly ?? true,
         sessionId: activeSessionId,
       });

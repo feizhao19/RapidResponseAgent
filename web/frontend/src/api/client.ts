@@ -45,6 +45,15 @@ export type AoiDetail = AoiRecord & {
     bottomLeft: [number, number];
   };
   imagery?: { pre?: boolean; post?: boolean };
+  /** Acquisition dates for the map Pre/Post timeline (from aligned meta / TIFF tags). */
+  imagery_dates?: { pre?: string | null; post?: string | null };
+  pre_match?: {
+    date?: string | null;
+    disaster_date?: string | null;
+    provider?: string | null;
+    method?: string | null;
+    extras?: Record<string, unknown>;
+  };
   artifacts?: Record<string, string | null>;
   vlm_arbitration?: VlmArbitrationSummary;
   vlm_damage_review?: VlmDamageReviewSummary;
@@ -641,7 +650,7 @@ export async function startVlmReview(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       mode: options?.mode ?? "both",
-      limit: options?.limit ?? 2,
+      limit: options?.limit ?? 10,
       damaged_only: options?.damagedOnly ?? true,
       session_id: options?.sessionId,
     }),
