@@ -121,10 +121,13 @@ class VlmReviewRequest(BaseModel):
         description="both | discrepancy (footprint) | damage",
     )
     limit: int = Field(
-        default=2,
+        default=10,
         ge=0,
         le=500,
-        description="Max candidates to review. Use 0 to review all matching candidates.",
+        description=(
+            "Max candidates to review (UI 'All' sends 10). "
+            "Use 0 to review all matching candidates."
+        ),
     )
     damaged_only: bool = Field(
         default=True,
