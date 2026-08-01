@@ -1,21 +1,10 @@
 # RapidResponseAgent
 
-**Multimodal AI Agent for Post-Disaster Assessment**
+**RapidResponseAgent v2** is here.
 
-When a wildfire or other disaster moves through a city, emergency teams do not need another model demo. They need a clear picture of what burned, where people and crews should go next, and answers they can trust—without waiting for a full perception rerun every time someone asks a follow-up.
+Designed to help emergency response teams rapidly assess disaster situations and allocate resources, RapidResponseAgent is a fully local, interactive multimodal AI agent built on open-weight models.
 
-**RapidResponseAgent** is built for that loop. Start from a **post-disaster** scene—pre-event imagery is optional. The system can automatically find a matching pre-disaster source, align the pair, and turn the result into durable assessment artifacts. A grounded conversation then sits on top of those artifacts: damage counts and directional priority, nearby hospitals / fire / police / shelters, **live Environmental Situation Layer** (temperature / humidity / wind + road conditions), short reports, and public emergency guidance—scoped to one AOI at a time, on your own machine.
-
-### From pixels to a decision surface
-
-The story of a session is deliberate:
-
-1. **See** — Upload or select a **post-disaster** GeoTIFF. Pre-event imagery is **not required**: the agent can search for an appropriate pre scene (Maxar Open → local Maxar → NAIP → USGS → NOAA, …) with acquisition in the **previous calendar month or earlier** (≥1 month gap vs the disaster/post date from the upload form, GeoTIFF tags/filename, or known events such as LA Jan 2025), align it to the post image, run **ViPDE** damage scoring at scale, and fuse predictions with official footprints.
-2. **Verify** — a **Vision-Language Agent** (Visual Verifier) challenges uncertain or inconsistent cases with multimodal chips; reviewers can **Agree** or **Reject**, and those preferences can later steer the Verifier via DPO / LoRA.
-3. **Hold still** — verified results become reusable artifacts (stats, maps, facilities, manifests). Expensive GPU work stays behind a checkpoint.
-4. **Ask** — downstream tools and local LLMs answer multi-turn questions over that frozen evidence. Numbers come from assessment tools; doctrine comes from cited public SOPs; vague prompts get a clarify menu instead of a confident wrong answer.
-
-Perception and reasoning are not two disconnected apps. They are one workflow: heavy vision once, light reasoning many times—while sensitive imagery stays **on-premises**.
+It integrates Vision-Language Model (VLM) reasoning, VLM-as-a-Judge verification, and reinforcement learning from human feedback (RLHF) to generate actionable decision-support reports—from post-disaster imagery to maps, facility context, situation layers, and grounded multi-turn Q&A, all on your own machine.
 
 Perception backbone: **[ViPDE / RapidDamageAssessment](https://github.com/feizhao19/RapidDamageAssessment)** — licensing and citation follow that project ([README](https://github.com/feizhao19/RapidDamageAssessment/blob/main/README.md)).
 
