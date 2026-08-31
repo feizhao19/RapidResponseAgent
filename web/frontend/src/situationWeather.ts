@@ -118,11 +118,14 @@ export function windPointsAtHour(
   }));
 }
 
-export const TIMELINE_TICKS = [
-  { hour: 0, label: "Now" },
-  { hour: 1, label: "1h" },
-  { hour: 3, label: "3h" },
-  { hour: 6, label: "6h" },
-  { hour: 12, label: "12h" },
-  { hour: 24, label: "24h" },
-] as const;
+export type TimelineTick = { hour: number; label: string };
+
+/** One tick per forecast hour: Now, 1h, 2h … up to `max`. */
+export function hourlyTimelineTicks(max: number): TimelineTick[] {
+  const last = Math.max(0, Math.floor(max));
+  const ticks: TimelineTick[] = [];
+  for (let hour = 0; hour <= last; hour += 1) {
+    ticks.push({ hour, label: hour === 0 ? "Now" : `${hour}h` });
+  }
+  return ticks;
+}

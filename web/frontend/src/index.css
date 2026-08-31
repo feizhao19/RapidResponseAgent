@@ -1996,26 +1996,72 @@ select {
   height: 3px;
 }
 
+/* Keep thumb width in sync with SLIDER_THUMB_PX so tick labels line up. */
+.situation-timeline-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+}
+
+.situation-timeline-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+}
+
 .situation-timeline-ticks {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  height: 1.2rem;
   margin-top: 0;
   line-height: 1;
 }
 
-.situation-timeline-ticks button {
+.situation-timeline-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.06rem;
+  white-space: nowrap;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
   font-size: 0.6rem;
-  padding: 0.05rem 0.12rem;
+  padding: 0 0.12rem;
   cursor: pointer;
   line-height: 1.15;
 }
 
-.situation-timeline-ticks button.is-active {
+.situation-timeline-tick-mark {
+  width: 1px;
+  height: 0.22rem;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+/* Hours without room for text stay clickable as a bare tick mark. */
+.situation-timeline-tick.is-bare {
+  padding: 0;
+}
+
+.situation-timeline-tick.is-bare .situation-timeline-tick-mark {
+  opacity: 0.28;
+}
+
+.situation-timeline-tick:hover .situation-timeline-tick-mark {
+  opacity: 0.9;
+}
+
+.situation-timeline-tick.is-active {
   color: var(--accent);
   font-weight: 700;
+}
+
+.situation-timeline-tick.is-active .situation-timeline-tick-mark {
+  opacity: 1;
+  height: 0.3rem;
+  width: 2px;
 }
 
 .situation-legend {

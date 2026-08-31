@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { GeoJSON, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { SituationRoads, SituationWeather } from "../api/client";
 import {
-  TIMELINE_TICKS,
+  hourlyTimelineTicks,
   cToF,
   formatHourLabel,
   humidityFill,
@@ -26,6 +26,7 @@ import {
   roadSummaryLabel,
   situationRoadsGeoJson,
 } from "../situationRoads";
+import { OVERLAY_FADE_MS } from "../mapCinematic";
 
 function escapeHtml(value: string): string {
   return value
@@ -137,7 +138,13 @@ function useMapGlassToggle({
   }, [active, disabled, map, className, label, labelOff, titleOn, titleOff]);
 }
 
-export function SituationPanes() {
+export function SituationPanes({
+  weatherRevealed = false,
+  roadsRevealed = false,
+}: {
+  weatherRevealed?: boolean;
+  roadsRevealed?: boolean;
+}) {
   const map = useMap();
   useEffect(() => {
     const ensurePane = (name: string, zIndex: string, pointerEvents?: string) => {
@@ -146,6 +153,8 @@ export function SituationPanes() {
       if (!pane) return;
       pane.style.zIndex = zIndex;
       if (pointerEvents) pane.style.pointerEvents = pointerEvents;
+      pane.style.opacity = pane.style.opacity || "0";
+      pane.style.transition = `opacity ${OVERLAY_FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
     };
     // Weather / roads above buildingsPane (450) so polygons do not cover them.
     ensurePane("humidityPane", "455", "none");
@@ -153,6 +162,22 @@ export function SituationPanes() {
     ensurePane("windPane", "460", "none");
     ensurePane("roadPane", "465");
   }, [map]);
+
+  useEffect(() => {
+    for (const name of ["humidityPane", "tempLabelPane", "windPane"] as const) {
+      const pane = map.getPane(name);
+      if (!pane) continue;
+      pane.style.opacity = weatherRevealed ? "1" : "0";
+    }
+  }, [map, weatherRevealed]);
+
+  useEffect(() => {
+    const pane = map.getPane("roadPane");
+    if (!pane) return;
+    pane.style.opacity = roadsRevealed ? "1" : "0";
+    pane.style.pointerEvents = roadsRevealed ? "auto" : "none";
+  }, [map, roadsRevealed]);
+
   return null;
 }
 
@@ -499,7 +524,11 @@ type HudProps = {
   hourIndex: number;
 };
 
-export function SituationHUD({ weather, hourIndex }: HudProps) {
+export function SituationHUD({
+  weather,
+  hourIndex,
+  visible = true,
+}: HudProps & { visible?: boolean }) {
   const sample = weather.centroid_series[hourIndex] ?? weather.centroid_series[0];
   if (!sample) return null;
   const mph = kmhToMph(sample.wind_speed_kmh);
@@ -507,7 +536,11 @@ export function SituationHUD({ weather, hourIndex }: HudProps) {
   const tempF = cToF(sample.temperature_c);
   const band = humidityBandLabel(sample.humidity_band);
   return (
-    <div className="situation-hud" aria-live="polite">
+    <div
+      className={`situation-hud situation-fade ${visible ? "situation-fade-visible" : ""}`}
+      aria-live="polite"
+      aria-hidden={!visible}
+    >
       <div className="situation-hud-head">
         <span className="situation-hud-kicker">Weather</span>
         <span className="situation-hud-time">{formatHourLabel(weather.hours[hourIndex], hourIndex)}</span>
@@ -545,10 +578,57 @@ type TimelineProps = {
   onChange: (index: number) => void;
 };
 
-export function ForecastTimeline({ weather, hourIndex, onChange }: TimelineProps) {
+/** Native range thumb travels over (track width - thumb width), so inset by half a thumb. */
+const SLIDER_THUMB_PX = 14;
+/** Horizontal room a tick label needs before neighbours start colliding. */
+const MIN_LABEL_PX = 26;
+const LABEL_STEPS = [1, 2, 3, 4, 6, 12];
+
+function sliderThumbOffset(hour: number, max: number): string {
+  const ratio = max > 0 ? Math.min(1, Math.max(0, hour / max)) : 0;
+  return `calc(${ratio} * (100% - ${SLIDER_THUMB_PX}px) + ${SLIDER_THUMB_PX / 2}px)`;
+}
+
+/** Ticks stay hourly; thin out only the text so labels never overlap. */
+function labelStepForWidth(width: number, max: number): number {
+  if (width <= 0 || max <= 0) return 1;
+  const usable = width - SLIDER_THUMB_PX;
+  for (const step of LABEL_STEPS) {
+    if ((Math.floor(max / step) + 1) * MIN_LABEL_PX <= usable) return step;
+  }
+  return LABEL_STEPS[LABEL_STEPS.length - 1];
+}
+
+export function ForecastTimeline({
+  weather,
+  hourIndex,
+  onChange,
+  visible = true,
+}: TimelineProps & { visible?: boolean }) {
   const max = Math.max(0, Math.min(24, weather.hours.length - 1));
+  const ticks = useMemo(() => hourlyTimelineTicks(max), [max]);
+  const ticksRef = useRef<HTMLDivElement | null>(null);
+  const [ticksWidth, setTicksWidth] = useState(0);
+
+  useEffect(() => {
+    const node = ticksRef.current;
+    if (!node) return;
+    setTicksWidth(node.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) setTicksWidth(entry.contentRect.width);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const labelStep = labelStepForWidth(ticksWidth, max);
+
   return (
-    <div className="situation-timeline">
+    <div
+      className={`situation-timeline situation-fade ${visible ? "situation-fade-visible" : ""}`}
+      aria-hidden={!visible}
+    >
       <div className="situation-timeline-label">
         Forecast · {formatHourLabel(weather.hours[hourIndex], hourIndex)}
       </div>
@@ -561,18 +641,33 @@ export function ForecastTimeline({ weather, hourIndex, onChange }: TimelineProps
         value={Math.min(hourIndex, max)}
         onChange={(e) => onChange(Number(e.target.value))}
         aria-label="Forecast timeline"
+        disabled={!visible}
       />
-      <div className="situation-timeline-ticks">
-        {TIMELINE_TICKS.filter((t) => t.hour <= max).map((t) => (
-          <button
-            key={t.hour}
-            type="button"
-            className={hourIndex === t.hour ? "is-active" : undefined}
-            onClick={() => onChange(t.hour)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="situation-timeline-ticks" ref={ticksRef}>
+        {ticks.map((t) => {
+          const active = hourIndex === t.hour;
+          const showLabel = active || t.hour % labelStep === 0 || t.hour === max;
+          return (
+            <button
+              key={t.hour}
+              type="button"
+              className={`situation-timeline-tick${active ? " is-active" : ""}${
+                showLabel ? "" : " is-bare"
+              }`}
+              onClick={() => onChange(t.hour)}
+              tabIndex={visible ? 0 : -1}
+              title={t.label}
+              aria-label={t.label}
+              // Align each tick with the slider thumb for that hour, not evenly spaced.
+              style={{ left: sliderThumbOffset(t.hour, max) }}
+            >
+              <span className="situation-timeline-tick-mark" aria-hidden="true" />
+              {showLabel ? (
+                <span className="situation-timeline-tick-text">{t.label}</span>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -589,12 +684,19 @@ export function SituationOverlay({
   onHourChange: (index: number) => void;
   visible: boolean;
 }): ReactNode {
-  if (!visible) return null;
   return (
     <>
-      <SituationHUD weather={weather} hourIndex={hourIndex} />
-      <ForecastTimeline weather={weather} hourIndex={hourIndex} onChange={onHourChange} />
-      <div className="situation-legend" aria-hidden="true">
+      <SituationHUD weather={weather} hourIndex={hourIndex} visible={visible} />
+      <ForecastTimeline
+        weather={weather}
+        hourIndex={hourIndex}
+        onChange={onHourChange}
+        visible={visible}
+      />
+      <div
+        className={`situation-legend situation-fade ${visible ? "situation-fade-visible" : ""}`}
+        aria-hidden={!visible}
+      >
         <span>Temperature</span>
         <span className="swatch temp-cool" />
         <span className="swatch temp-mild" />
@@ -751,12 +853,14 @@ export function SituationRoadChip({
   visible: boolean;
   withTimeline?: boolean;
 }) {
-  if (!visible) return null;
   const counts = roadSummaryCounts(roads);
   return (
     <div
-      className={`situation-road-hud${withTimeline ? " with-timeline" : ""}`}
+      className={`situation-road-hud situation-fade${withTimeline ? " with-timeline" : ""}${
+        visible ? " situation-fade-visible" : ""
+      }`}
       aria-live="polite"
+      aria-hidden={!visible}
     >
       <div className="situation-road-hud-head">
         <span className="situation-road-hud-title">Roads</span>
