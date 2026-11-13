@@ -1,0 +1,12 @@
+name = "certbrief"
+version = "0.1.0"
+defaultTargets = ["CertBrief", "certbrief"]
+
+# Core Lean only — no Mathlib (keeps toolchain ~0.5 GB and builds fast).
+
+[[lean_lib]]
+name = "CertBrief"
+
+[[lean_exe]]
+name = "certbrief"
+root = "Main"

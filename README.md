@@ -88,6 +88,7 @@ GPU-heavy steps run in the assessment job; the chat path is rules-first tool rou
 | `geoagent/` | Agent orchestration package — available by request; contact the author (see License) |
 | `knowledge/sops/` | Curated **public** emergency-guidance markdown (FEMA / Cal OES / Ready.gov / NWS) for Knowledge RAG |
 | `perception/` | ViPDE inference entrypoints, configs, docs; proprietary package lives under `vipde/` (local only) |
+| `lean/` | **Lean 4** specification, proofs, and the compiled `certbrief` checker (see [Formal verification with Lean 4](#formal-verification-with-lean-4)) |
 | `web/` | FastAPI backend + React / Vite / Leaflet UI |
 | `scripts/` | Offline pipeline CLIs (align, fusion, VLM, reports, knowledge index, model download) — may be omitted in some distributions |
 | `data/` | Local imagery, aligned AOIs, sessions, indexes, Chroma store (not in git) |
@@ -105,6 +106,7 @@ GPU-heavy steps run in the assessment job; the chat path is rules-first tool rou
 | LLMs | Local Llama 3.2 **1B** / Llama 3.1 **8B** / Llama 3.2 **11B Vision** (Hugging Face) |
 | Case RAG | sentence-transformers over assessment artifacts |
 | Knowledge RAG | **Chroma** + sentence-transformers over `knowledge/sops/` |
+| Formal verification | **Lean 4** (core library, no Mathlib) — verified claim & policy checker |
 | Backend | FastAPI |
 | Frontend | React 18, TypeScript, Vite, Leaflet |
 | External | OpenStreetMap Overpass (**hospitals, fire, police, shelters**), Open-Meteo weather, Caltrans LCS + CHP road feeds, Maxar ARD + NOAA ERI imagery |
@@ -219,6 +221,36 @@ PYTHONPATH=. python scripts/build_knowledge_rag_index.py
 
 Facility locations come from **OpenStreetMap** and may be incomplete—verify with official authorities before operational use.
 Road and weather feeds are live snapshots and can lag real conditions.
+
+---
+
+## Formal verification with Lean 4
+
+RapidResponseAgent checks its own decision briefs with a small checker written and proved in **[Lean 4](https://lean-lang.org/)**. The LLM is treated as an untrusted writer; a compiled Lean program is the judge.
+
+- **Content.** After the tools run, checkable statements in a brief — damage counts and percentages, the Priority 1–3 ranking, the recommended action per cell — are extracted deterministically (no LLM) and verified against the assessment-tool outputs by the compiled Lean checker.
+- **Agent behaviour.** The same checker validates each turn's tool execution: multi-tool plans run only after the user confirms exactly those tools, and operational numbers come only from case-data tools of the active AOI — never from SOP guidance.
+- Verdicts for every chat turn are recorded alongside the episode log.
+
+Proved in Lean (core library only, no `sorry`; theorems depend only on Lean's standard axioms):
+
+| Area | Properties |
+|------|------------|
+| Data | Building counts are conserved when binned into the 3×3 grid; impact strictly increases when any building's damage level rises |
+| Ranking | The Mission Priority ranking satisfies its declarative spec, Priority 1 dominates every non-empty cell, and the ranking is unique |
+| Action rule | Safety properties of the recommended action (e.g. ≥ 5 destroyed ⇒ Search & Rescue; undamaged ⇒ rapid inspection only) |
+| Checker | The claim checker is **sound and complete**: it accepts a claim iff the claim follows from the tool facts |
+| Policy | The tool-execution policy checker is **sound and complete** |
+
+What is *not* proved: extracting claims from free text, the JSON bridge between Python and Lean, and the perception outputs themselves (ViPDE, footprints). These are covered by tests. The guarantee is that certified claims are consistent with the tool data — not that the tool data matches the ground.
+
+```bash
+# Lean toolchain via elan (https://github.com/leanprover/elan); version pinned in lean/lean-toolchain
+cd lean && lake build            # type-checks all proofs and builds the `certbrief` checker
+echo '{"facts":{"aoi":{"no_damage":1,"minor":0,"major":0,"destroyed":5},"grid":{"NE":{"no_damage":1,"minor":0,"major":0,"destroyed":5}}},"claims":[{"kind":"action","scope":"NE","action":"Immediate Search & Rescue"}]}' \
+  | .lake/build/bin/certbrief     # → {"grid_consistent":true,"policy":null,"verdicts":[true]}
+```
+
 ---
 
 ## Visual Verifier preferences → DPO (optional)
